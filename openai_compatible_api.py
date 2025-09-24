@@ -51,24 +51,78 @@ app = FastAPI(title="OpenAI Compatible Audio API", version="1.0.0")
 cosyvoice_model = None
 dolphin_model = None
 
+def fix_cosyvoice_model_path(expected_model_path: str = "CosyVoice/pretrained_models/CosyVoice2-0.5B"):
+    """修复CosyVoice模型路径问题"""
+    base_dir = Path(__file__).parent
+
+    # API期望的路径
+    expected_path = base_dir / expected_model_path
+
+    # 如果期望路径已存在且有效，直接返回
+    if expected_path.exists():
+        config_files = list(expected_path.glob("*.yaml"))
+        if config_files:
+            print(f"✓ CosyVoice模型路径正确: {expected_model_path}")
+            return True
+
+    # 检查ModelScope下载的实际路径
+    potential_paths = [
+        base_dir / "CosyVoice" / "pretrained_models" / "iic" / "CosyVoice2-0.5B",
+        base_dir / "models" / "cosyvoice" / "iic" / "CosyVoice2-0.5B",
+        base_dir / "CosyVoice" / "pretrained_models" / "CosyVoice-300M-SFT",
+        base_dir / "CosyVoice" / "pretrained_models" / "CosyVoice-300M",
+    ]
+
+    for actual_path in potential_paths:
+        if actual_path.exists() and actual_path.is_dir():
+            # 检查是否有配置文件
+            config_files = list(actual_path.glob("*.yaml"))
+            if config_files:
+                print(f"找到CosyVoice模型: {actual_path}")
+                print(f"配置文件: {[f.name for f in config_files]}")
+
+                # 确保期望路径的父目录存在
+                expected_path.parent.mkdir(parents=True, exist_ok=True)
+
+                # 尝试创建符号链接
+                if not expected_path.exists():
+                    try:
+                        expected_path.symlink_to(actual_path, target_is_directory=True)
+                        print(f"✓ 创建符号链接: {expected_path} -> {actual_path}")
+                        return True
+                    except OSError:
+                        # 如果符号链接失败，尝试移动
+                        try:
+                            import shutil
+                            if expected_path.exists():
+                                shutil.rmtree(expected_path)
+                            shutil.move(str(actual_path), str(expected_path))
+                            print(f"✓ 移动模型文件: {actual_path} -> {expected_path}")
+                            return True
+                        except Exception as e:
+                            print(f"✗ 移动模型失败: {e}")
+                            continue
+                else:
+                    return True
+
+    return False
+
 def check_and_download_models(cosyvoice_model_path: str = "CosyVoice/pretrained_models/CosyVoice2-0.5B"):
     """检查并下载必要的模型"""
     print("检查模型文件...")
 
-    # 检查CosyVoice模型
-    cosyvoice_ready = False
-    full_path = Path(__file__).parent / cosyvoice_model_path
-    if full_path.exists():
-        # 检查关键配置文件
-        cosyvoice2_yaml = full_path / "cosyvoice2.yaml"
-        cosyvoice_yaml = full_path / "cosyvoice.yaml"
-        if cosyvoice2_yaml.exists() or cosyvoice_yaml.exists():
-            print(f"✓ CosyVoice模型已存在: {cosyvoice_model_path}")
-            cosyvoice_ready = True
+    # 检查并修复CosyVoice模型路径
+    cosyvoice_ready = fix_cosyvoice_model_path(cosyvoice_model_path)
 
     if not cosyvoice_ready:
         print(f"✗ CosyVoice模型不存在，开始下载到: {cosyvoice_model_path}")
-        download_cosyvoice_model(cosyvoice_model_path)
+        try:
+            download_cosyvoice_model(cosyvoice_model_path)
+            # 下载后再次尝试修复路径
+            cosyvoice_ready = fix_cosyvoice_model_path(cosyvoice_model_path)
+        except Exception as e:
+            print(f"CosyVoice模型下载失败: {e}")
+            cosyvoice_ready = False
 
     # 检查Dolphin模型（使用FunASR）
     dolphin_ready = False
@@ -111,6 +165,11 @@ def download_cosyvoice_model(model_path: str):
         )
         print(f"✓ CosyVoice模型下载完成: {downloaded_path}")
 
+        # 下载完成后，调用路径修复函数
+        fix_cosyvoice_model_path(model_path)
+
+        return downloaded_path
+
     except ImportError:
         print("✗ ModelScope未安装，请运行: pip install modelscope")
         raise RuntimeError("无法下载CosyVoice模型，ModelScope未安装")
@@ -131,14 +190,15 @@ class TranscriptionResponse(BaseModel):
 def initialize_cosyvoice(model_path: str = "CosyVoice/pretrained_models/CosyVoice2-0.5B"):
     """Initialize CosyVoice model"""
     global cosyvoice_model
-    
+
     if not CosyVoice or not CosyVoice2:
         raise RuntimeError("CosyVoice not available")
-    
+
     full_path = Path(__file__).parent / model_path
     if not full_path.exists():
-        # Try alternative paths
+        # Try alternative paths including the downloaded ModelScope path
         alt_paths = [
+            "CosyVoice/pretrained_models/iic/CosyVoice2-0.5B",  # ModelScope下载路径
             "CosyVoice/pretrained_models/CosyVoice-300M-SFT",
             "CosyVoice/pretrained_models/CosyVoice-300M",
         ]
@@ -146,14 +206,15 @@ def initialize_cosyvoice(model_path: str = "CosyVoice/pretrained_models/CosyVoic
             alt_full_path = Path(__file__).parent / alt_path
             if alt_full_path.exists():
                 full_path = alt_full_path
+                print(f"使用替代路径: {alt_path}")
                 break
         else:
-            raise FileNotFoundError(f"CosyVoice model not found at {model_path} or alternative paths")
-    
+            raise FileNotFoundError(f"CosyVoice model not found at {model_path} or alternative paths: {alt_paths}")
+
     # Check which config file exists and use appropriate class
     cosyvoice2_yaml = full_path / "cosyvoice2.yaml"
     cosyvoice_yaml = full_path / "cosyvoice.yaml"
-    
+
     try:
         if cosyvoice2_yaml.exists():
             cosyvoice_model = CosyVoice2(str(full_path), load_jit=False, load_trt=False, fp16=False)
@@ -198,33 +259,39 @@ async def startup_event():
     print("OpenAI Compatible Audio API 启动中...")
     print("=" * 50)
 
+    print("🔍 检查模型状态...")
+
     # 检查并下载模型
     try:
         cosyvoice_ready, dolphin_ready = check_and_download_models(cosyvoice_model_path)
     except Exception as e:
-        print(f"模型检查/下载失败: {e}")
-        print("将尝试继续启动，某些功能可能不可用")
+        print(f"❌ 模型检查/下载失败: {e}")
+        print("⚠️ 将尝试继续启动，某些功能可能不可用")
+
+    print("\n🚀 初始化模型...")
 
     # 初始化CosyVoice
     try:
         initialize_cosyvoice(cosyvoice_model_path)
-        print("✓ CosyVoice TTS服务已启动")
+        print("✅ CosyVoice TTS服务已启动")
     except Exception as e:
-        print(f"✗ CosyVoice初始化失败: {e}")
-        print("TTS功能将不可用")
+        print(f"❌ CosyVoice初始化失败: {e}")
+        print("⚠️ TTS功能将不可用")
 
     # 初始化Dolphin/FunASR
     try:
         initialize_dolphin(dolphin_model_name)
-        print("✓ FunASR转录服务已启动")
+        print("✅ FunASR转录服务已启动")
     except Exception as e:
-        print(f"✗ FunASR初始化失败: {e}")
-        print("ASR功能将不可用")
+        print(f"❌ FunASR初始化失败: {e}")
+        print("⚠️ ASR功能将不可用")
 
-    print("=" * 50)
-    print("API服务器启动完成！")
-    print(f"CosyVoice TTS: {'✓ 可用' if cosyvoice_model else '✗ 不可用'}")
-    print(f"FunASR 转录: {'✓ 可用' if dolphin_model else '✗ 不可用'}")
+    print("\n" + "=" * 50)
+    print("🎉 API服务器启动完成！")
+    print(f"🎙️  CosyVoice TTS: {'✅ 可用' if cosyvoice_model else '❌ 不可用'}")
+    print(f"🎧 FunASR 转录: {'✅ 可用' if dolphin_model else '❌ 不可用'}")
+    print("🌐 服务地址: http://127.0.0.1:8000")
+    print("📖 API文档: http://127.0.0.1:8000/docs")
     print("=" * 50)
 
 @app.post("/v1/audio/speech")
