@@ -15,11 +15,10 @@ OpenAI兼容的音频API服务器，基于CosyVoice (TTS) 和 FunASR (ASR) 实�
 openai-compatible-audio-api/
 ├── openai_compatible_api.py    # 主API服务器
 ├── requirements.txt            # Python依赖
-├── download_models.py          # 模型下载脚本
-├── models/                    # 模型存储目录
-│   ├── cosyvoice/            # CosyVoice模型
-│   └── dolphin/              # FunASR模型
-├── CosyVoice/                 # CosyVoice TTS项目
+├── models/                    # 模型存储目录（自动创建）
+│   ├── cosyvoice/            # CosyVoice模型（自动下载）
+│   └── dolphin/              # FunASR模型（自动下载）
+├── CosyVoice/                 # CosyVoice TTS项目（自动创建）
 └── README.md                  # 本文件
 ```
 
@@ -40,14 +39,7 @@ conda activate myenv311
 pip install -r requirements.txt
 ```
 
-#### 2. 预下载模型（可选）
-
-```bash
-# 如果需要预下载模型到项目目录
-python3 download_models.py
-```
-
-#### 3. 运行服务器
+#### 2. 运行服务器
 
 ```bash
 # 基本运行
