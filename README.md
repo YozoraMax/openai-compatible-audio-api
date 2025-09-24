@@ -18,10 +18,10 @@ openai-compatible-audio-api/
 ├── README.md                  # 项目说明文档
 ├── .gitignore                 # Git忽略文件配置
 ├── CosyVoice/                 # CosyVoice TTS项目（自动下载）
-├── Dolphin/                   # Dolphin项目目录
+├── Dolphin/                   # 历史项目目录（已不使用）
 └── models/                    # 模型存储目录（运行时自动创建）
     ├── cosyvoice/            # CosyVoice模型文件
-    └── dolphin/              # FunASR模型缓存
+    └── funasr/               # FunASR模型缓存
 ```
 
 ## 部署方式
@@ -44,21 +44,32 @@ pip install -r requirements.txt
 #### 2. 启动服务
 
 ```bash
-# 基本运行（推荐）
+# 基本运行
 python3 openai_compatible_api.py
+
+# 快速启动（推荐demo使用）
+python3 openai_compatible_api.py --fast
 
 # 自定义配置
 python3 openai_compatible_api.py \
   --host 0.0.0.0 \
   --port 8000 \
   --cosyvoice-model "CosyVoice/pretrained_models/CosyVoice2-0.5B" \
-  --dolphin-model "paraformer-zh"
+  --asr-model "paraformer-zh-small"
 ```
+
+**启动选项说明：**
+- `--fast`: 快速模式，使用小模型，启动更快
+- `--asr-model`: 指定ASR模型
+  - `paraformer-zh`: 大模型 (~1GB，高精度)
+  - `paraformer-zh-small`: 小模型 (~300MB，快速启动)
+  - `paraformer-zh-streaming`: 流式模型 (~500MB，低延迟)
 
 **首次启动说明：**
 - 服务会自动检测并下载必要的模型文件
-- CosyVoice模型约2GB，FunASR模型约1GB
-- 下载完成后会自动启动API服务
+- 加载过程会显示详细进度和耗时
+- CosyVoice模型约2GB，FunASR大模型约1GB，小模型约300MB
+- 使用 `--fast` 选项可显著减少启动时间
 - 默认服务地址：`http://127.0.0.1:8000`
 
 ### 环境管理
@@ -152,9 +163,19 @@ curl http://127.0.0.1:8000/v1/models
 
 5. **内存不足**
    - CosyVoice和FunASR模型较大，建议至少8GB内存
+   - 使用 `--fast` 选项可减少内存占用
    - 可以只启用其中一个模型
 
-6. **Conda环境问题**
+6. **模型加载时间长**
+   ```bash
+   # 使用小模型快速启动
+   python3 openai_compatible_api.py --fast
+
+   # 或手动指定小模型
+   python3 openai_compatible_api.py --asr-model paraformer-zh-small
+   ```
+
+7. **Conda环境问题**
    ```bash
    # 如果conda未安装，可以下载Miniconda
    wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
@@ -178,7 +199,7 @@ curl http://127.0.0.1:8000/v1/models
 
 - `openai_compatible_api.py`: 主API服务器
 - `initialize_cosyvoice()`: CosyVoice模型初始化
-- `initialize_dolphin()`: FunASR模型初始化
+- `initialize_funasr()`: FunASR模型初始化
 - `/v1/audio/speech`: TTS端点实现
 - `/v1/audio/transcriptions`: ASR端点实现
 

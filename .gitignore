@@ -40,8 +40,8 @@ venv.bak/
 CosyVoice/pretrained_models/
 CosyVoice/zero_shot_prompt.wav
 
-# Dolphin cache
-.cache/dolphin/
+# FunASR cache
+.cache/funasr/
 
 # Temporary files
 *.tmp

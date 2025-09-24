@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-OpenAI-compatible API server for CosyVoice (TTS) and Dolphin (ASR)
+OpenAI-compatible API server for CosyVoice (TTS) and FunASR (ASR)
 Provides /v1/audio/speech and /v1/audio/transcriptions endpoints
 """
 
@@ -25,8 +25,7 @@ import uvicorn
 sys.path.append(str(Path(__file__).parent / "CosyVoice" / "third_party" / "Matcha-TTS"))
 sys.path.append(str(Path(__file__).parent / "CosyVoice"))
 
-# Add Dolphin to path
-sys.path.append(str(Path(__file__).parent / "Dolphin"))
+# Note: Dolphin directory is kept for historical reference but not used
 
 # Import CosyVoice
 CosyVoice = None
@@ -59,19 +58,14 @@ except Exception as e:
     print(f"❌ CosyVoice初始化错误: {e}")
     print("💡 这可能是模型加载问题，服务器将继续启动但TTS功能不可用")
 
-# Import FunASR (替代Dolphin)
-dolphin = None
-try:
-    # 不再尝试导入原始Dolphin，直接使用FunASR
-    print("ℹ️ 使用FunASR替代Dolphin进行语音识别")
-except Exception as e:
-    print(f"ℹ️ Dolphin不可用，将使用FunASR: {e}")
+# FunASR for speech recognition
+print("ℹ️ 使用FunASR进行语音识别")
 
 app = FastAPI(title="OpenAI Compatible Audio API", version="1.0.0")
 
 # Global models
 cosyvoice_model = None
-dolphin_model = None
+funasr_model = None
 
 def fix_cosyvoice_model_path(expected_model_path: str = "CosyVoice/pretrained_models/CosyVoice2-0.5B"):
     """修复CosyVoice模型路径问题"""
@@ -146,13 +140,13 @@ def check_and_download_models(cosyvoice_model_path: str = "CosyVoice/pretrained_
             print(f"CosyVoice模型下载失败: {e}")
             cosyvoice_ready = False
 
-    # 检查Dolphin模型（使用FunASR）
-    dolphin_ready = False
+    # 检查FunASR模型
+    funasr_ready = False
     try:
         from funasr import AutoModel
         # 简单检查是否可以初始化模型（会自动下载）
-        print("检查Dolphin/FunASR模型...")
-        model_dir = Path(__file__).parent / "models" / "dolphin"
+        print("检查FunASR模型...")
+        model_dir = Path(__file__).parent / "models" / "funasr"
         model_dir.mkdir(parents=True, exist_ok=True)
 
         # 设置缓存目录
@@ -161,15 +155,15 @@ def check_and_download_models(cosyvoice_model_path: str = "CosyVoice/pretrained_
         # 尝试加载模型（如果不存在会自动下载）
         print("初始化FunASR模型（如需要会自动下载）...")
         test_model = AutoModel(model="paraformer-zh", cache_dir=str(model_dir))
-        print("✓ Dolphin/FunASR模型准备就绪")
-        dolphin_ready = True
+        print("✓ FunASR模型准备就绪")
+        funasr_ready = True
 
     except ImportError:
         print("✗ FunASR未安装，请运行: pip install funasr")
     except Exception as e:
-        print(f"✗ Dolphin/FunASR模型初始化失败: {e}")
+        print(f"✗ FunASR模型初始化失败: {e}")
 
-    return cosyvoice_ready, dolphin_ready
+    return cosyvoice_ready, funasr_ready
 
 def download_cosyvoice_model(model_path: str):
     """下载CosyVoice模型"""
@@ -212,11 +206,17 @@ class TranscriptionResponse(BaseModel):
 def initialize_cosyvoice(model_path: str = "CosyVoice/pretrained_models/CosyVoice2-0.5B"):
     """Initialize CosyVoice model"""
     global cosyvoice_model
+    import time
 
     if not CosyVoice or not CosyVoice2:
         raise RuntimeError("CosyVoice not available")
 
+    print(f"🔄 开始加载 CosyVoice 模型...")
+    start_time = time.time()
+
     full_path = Path(__file__).parent / model_path
+    print(f"📂 模型路径: {model_path}")
+
     if not full_path.exists():
         # Try alternative paths including the downloaded ModelScope path
         alt_paths = [
@@ -238,32 +238,56 @@ def initialize_cosyvoice(model_path: str = "CosyVoice/pretrained_models/CosyVoic
     cosyvoice_yaml = full_path / "cosyvoice.yaml"
 
     try:
+        print("⏳ 正在初始化模型参数...")
         if cosyvoice2_yaml.exists():
+            print("📄 使用 CosyVoice2 配置")
             cosyvoice_model = CosyVoice2(str(full_path), load_jit=False, load_trt=False, fp16=False)
-            print(f"Loaded CosyVoice2 from {full_path}")
+            model_type = "CosyVoice2"
         elif cosyvoice_yaml.exists():
+            print("📄 使用 CosyVoice 配置")
             cosyvoice_model = CosyVoice(str(full_path), load_jit=False, load_trt=False, fp16=False)
-            print(f"Loaded CosyVoice from {full_path}")
+            model_type = "CosyVoice"
         else:
             raise FileNotFoundError(f"Neither cosyvoice2.yaml nor cosyvoice.yaml found in {full_path}")
+
+        elapsed = time.time() - start_time
+        print(f"✅ {model_type} 模型加载完成 (耗时: {elapsed:.1f}秒)")
     except Exception as e:
         raise RuntimeError(f"Failed to load CosyVoice model: {e}")
 
-def initialize_dolphin(model_name: str = "paraformer-zh"):
-    """Initialize Dolphin/FunASR model"""
-    global dolphin_model
+def initialize_funasr(model_name: str = "paraformer-zh"):
+    """Initialize FunASR model"""
+    global funasr_model
 
     try:
         from funasr import AutoModel
+        import time
 
-        model_dir = Path(__file__).parent / "models" / "dolphin"
+        model_dir = Path(__file__).parent / "models" / "funasr"
         model_dir.mkdir(parents=True, exist_ok=True)
 
         # 设置缓存目录
         os.environ['FUNASR_CACHE_HOME'] = str(model_dir)
 
-        dolphin_model = AutoModel(model=model_name, cache_dir=str(model_dir))
-        print(f"Loaded FunASR {model_name} model")
+        print(f"🔄 开始加载 FunASR 模型: {model_name}")
+        start_time = time.time()
+
+        # 小模型映射
+        model_sizes = {
+            "paraformer-zh": "大模型 (~1GB)",
+            "paraformer-zh-small": "小模型 (~300MB)",
+            "paraformer-zh-streaming": "流式模型 (~500MB)",
+            "paraformer-en": "英文模型 (~800MB)"
+        }
+
+        size_info = model_sizes.get(model_name, "未知大小")
+        print(f"📊 模型信息: {size_info}")
+        print("⏳ 正在下载/加载模型，请稍候...")
+
+        funasr_model = AutoModel(model=model_name, cache_dir=str(model_dir))
+
+        elapsed = time.time() - start_time
+        print(f"✅ FunASR {model_name} 模型加载完成 (耗时: {elapsed:.1f}秒)")
 
     except ImportError:
         raise RuntimeError("FunASR not available, please install: pip install funasr")
@@ -275,7 +299,7 @@ async def startup_event():
     """Initialize models on startup"""
     # 获取配置的模型路径
     cosyvoice_model_path = globals().get('COSYVOICE_MODEL_PATH', 'CosyVoice/pretrained_models/CosyVoice2-0.5B')
-    dolphin_model_name = globals().get('DOLPHIN_MODEL_NAME', 'paraformer-zh')
+    asr_model_name = globals().get('ASR_MODEL_NAME', 'paraformer-zh')
 
     print("=" * 50)
     print("OpenAI Compatible Audio API 启动中...")
@@ -285,7 +309,7 @@ async def startup_event():
 
     # 检查并下载模型
     try:
-        cosyvoice_ready, dolphin_ready = check_and_download_models(cosyvoice_model_path)
+        cosyvoice_ready, funasr_ready = check_and_download_models(cosyvoice_model_path)
     except Exception as e:
         print(f"❌ 模型检查/下载失败: {e}")
         print("⚠️ 将尝试继续启动，某些功能可能不可用")
@@ -300,9 +324,9 @@ async def startup_event():
         print(f"❌ CosyVoice初始化失败: {e}")
         print("⚠️ TTS功能将不可用")
 
-    # 初始化Dolphin/FunASR
+    # 初始化FunASR
     try:
-        initialize_dolphin(dolphin_model_name)
+        initialize_funasr(asr_model_name)
         print("✅ FunASR转录服务已启动")
     except Exception as e:
         print(f"❌ FunASR初始化失败: {e}")
@@ -311,7 +335,7 @@ async def startup_event():
     print("\n" + "=" * 50)
     print("🎉 API服务器启动完成！")
     print(f"🎙️  CosyVoice TTS: {'✅ 可用' if cosyvoice_model else '❌ 不可用'}")
-    print(f"🎧 FunASR 转录: {'✅ 可用' if dolphin_model else '❌ 不可用'}")
+    print(f"🎧 FunASR 转录: {'✅ 可用' if funasr_model else '❌ 不可用'}")
     print("🌐 服务地址: http://127.0.0.1:8000")
     print("📖 API文档: http://127.0.0.1:8000/docs")
     print("=" * 50)
@@ -411,7 +435,7 @@ async def create_transcription(
     Transcribe audio to text using FunASR
     Compatible with OpenAI's /v1/audio/transcriptions endpoint
     """
-    if dolphin_model is None:
+    if funasr_model is None:
         raise HTTPException(status_code=503, detail="FunASR model not available")
 
     try:
@@ -423,7 +447,7 @@ async def create_transcription(
 
         try:
             # Use FunASR for transcription
-            result = dolphin_model(tmp_file_path)
+            result = funasr_model(tmp_file_path)
 
             # Clean up temp file
             os.unlink(tmp_file_path)
@@ -465,7 +489,7 @@ async def health_check():
     return {
         "status": "healthy",
         "cosyvoice_available": cosyvoice_model is not None,
-        "dolphin_available": dolphin_model is not None
+        "funasr_available": funasr_model is not None
     }
 
 @app.get("/v1/models")
@@ -479,9 +503,9 @@ async def list_models():
             {"id": "tts-1-hd", "object": "model", "created": 1677610602, "owned_by": "cosyvoice"}
         ])
     
-    if dolphin_model is not None:
+    if funasr_model is not None:
         models.extend([
-            {"id": "whisper-1", "object": "model", "created": 1677610602, "owned_by": "dolphin"}
+            {"id": "whisper-1", "object": "model", "created": 1677610602, "owned_by": "funasr"}
         ])
     
     return {"object": "list", "data": models}
@@ -495,17 +519,24 @@ if __name__ == "__main__":
     parser.add_argument("--cosyvoice-model", type=str, 
                        default="CosyVoice/pretrained_models/CosyVoice2-0.5B",
                        help="CosyVoice model path")
-    parser.add_argument("--dolphin-model", type=str, default="paraformer-zh",
-                       help="FunASR model name (paraformer-zh, paraformer-en, etc.)")
-    
+    parser.add_argument("--asr-model", type=str, default="paraformer-zh",
+                       help="FunASR model name (paraformer-zh, paraformer-zh-small, paraformer-zh-streaming)")
+    parser.add_argument("--fast", action="store_true",
+                       help="Use faster/smaller models for demo (paraformer-zh-small)")
+
     args = parser.parse_args()
+
+    # Apply fast mode
+    if args.fast:
+        args.asr_model = "paraformer-zh-small"
+        print("🚀 快速模式已启用，使用小模型")
     
     # Override defaults
     globals()['COSYVOICE_MODEL_PATH'] = args.cosyvoice_model
-    globals()['DOLPHIN_MODEL_NAME'] = args.dolphin_model
-    
+    globals()['ASR_MODEL_NAME'] = args.asr_model
+
     print(f"Starting OpenAI-compatible API server on {args.host}:{args.port}")
     print(f"CosyVoice model: {args.cosyvoice_model}")
-    print(f"Dolphin model: {args.dolphin_model}")
+    print(f"FunASR model: {args.asr_model}")
     
     uvicorn.run(app, host=args.host, port=args.port)
