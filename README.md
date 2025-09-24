@@ -44,11 +44,14 @@ pip install -r requirements.txt
 #### 2. 启动服务
 
 ```bash
-# 基本运行
+# 基本运行（完整功能）
 python3 openai_compatible_api.py
 
-# 快速启动（推荐demo使用）
+# 快速启动（推荐demo使用，仅TTS功能）
 python3 openai_compatible_api.py --fast
+
+# 仅TTS模式（最快启动）
+python3 openai_compatible_api.py --tts-only
 
 # 自定义配置
 python3 openai_compatible_api.py \
@@ -59,17 +62,26 @@ python3 openai_compatible_api.py \
 ```
 
 **启动选项说明：**
-- `--fast`: 快速模式，使用流式模型，启动更快
-- `--asr-model`: 指定ASR模型
+- `--fast`: 快速模式，自动启用TTS专用模式，跳过ASR模型加载
+- `--tts-only`: TTS专用模式，仅启用文本转语音功能，跳过语音识别
+- `--asr-model`: 指定ASR模型（仅在完整模式下有效）
   - `paraformer-zh`: 标准中文模型 (~1GB，高精度)
-  - `paraformer-zh-streaming`: 流式模型 (~500MB，快速启动，低延迟)
+  - `paraformer-zh-streaming`: 流式模型 (~840MB，快速启动，低延迟)
 
 **首次启动说明：**
 - 服务会自动检测并下载必要的模型文件
 - 加载过程会显示详细进度和耗时
-- CosyVoice模型约2GB，FunASR大模型约1GB，小模型约300MB
-- 使用 `--fast` 选项可显著减少启动时间
+- CosyVoice模型约2GB，FunASR大模型约1GB
+- 使用 `--fast` 或 `--tts-only` 选项可显著减少启动时间
 - 默认服务地址：`http://127.0.0.1:8000`
+
+**性能对比：**
+
+| 启动模式 | 启动时间 | 模型大小 | 功能 |
+|---------|---------|---------|------|
+| 完整模式 | ~5-10分钟 | ~3GB | TTS + ASR |
+| 快速模式 (`--fast`) | ~2-3分钟 | ~2GB | 仅TTS |
+| TTS专用 (`--tts-only`) | ~2-3分钟 | ~2GB | 仅TTS |
 
 ### 环境管理
 
@@ -101,6 +113,8 @@ curl -X POST "http://127.0.0.1:8000/v1/audio/speech" \
 ```
 
 ### 语音转文本 (ASR)
+
+**注意：ASR功能仅在完整模式下可用，TTS专用模式不支持语音转文本**
 
 ```bash
 curl -X POST "http://127.0.0.1:8000/v1/audio/transcriptions" \
@@ -167,10 +181,13 @@ curl http://127.0.0.1:8000/v1/models
 
 6. **模型加载时间长**
    ```bash
-   # 使用小模型快速启动
+   # 使用TTS专用模式（最快）
+   python3 openai_compatible_api.py --tts-only
+
+   # 或使用快速模式
    python3 openai_compatible_api.py --fast
 
-   # 或手动指定流式模型
+   # 或手动指定流式模型（仍较慢）
    python3 openai_compatible_api.py --asr-model paraformer-zh-streaming
    ```
 

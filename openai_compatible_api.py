@@ -276,15 +276,34 @@ def initialize_funasr(model_name: str = "paraformer-zh"):
         model_sizes = {
             "paraformer-zh": "标准中文模型 (~1GB)",
             "iic/speech_paraformer-zh-small_asr_nat-zh-cn-16k-common-vocab8404-pytorch": "小模型 (~300MB)",
-            "paraformer-zh-streaming": "流式模型 (~500MB)",
+            "paraformer-zh-streaming": "流式模型 (~840MB)",
             "paraformer-en": "英文模型 (~800MB)"
         }
 
         size_info = model_sizes.get(model_name, "未知大小")
         print(f"📊 模型信息: {size_info}")
         print("⏳ 正在下载/加载模型，请稍候...")
+        print("💡 提示: 模型加载可能需要几分钟，请耐心等待...")
 
-        funasr_model = AutoModel(model=model_name, cache_dir=str(model_dir))
+        # 添加加载进度提示
+        import threading
+        import time
+
+        def progress_indicator():
+            dots = 0
+            while not hasattr(progress_indicator, 'stop'):
+                dots = (dots + 1) % 4
+                print(f"\r⏳ 模型加载中{'.' * dots}{' ' * (3 - dots)}", end='', flush=True)
+                time.sleep(1)
+
+        progress_thread = threading.Thread(target=progress_indicator, daemon=True)
+        progress_thread.start()
+
+        try:
+            funasr_model = AutoModel(model=model_name, cache_dir=str(model_dir))
+        finally:
+            progress_indicator.stop = True
+            print("\r", end='')  # 清除进度指示器
 
         elapsed = time.time() - start_time
         print(f"✅ FunASR {model_name} 模型加载完成 (耗时: {elapsed:.1f}秒)")
@@ -300,9 +319,12 @@ async def startup_event():
     # 获取配置的模型路径
     cosyvoice_model_path = globals().get('COSYVOICE_MODEL_PATH', 'CosyVoice/pretrained_models/CosyVoice2-0.5B')
     asr_model_name = globals().get('ASR_MODEL_NAME', 'paraformer-zh')
+    tts_only_mode = globals().get('TTS_ONLY_MODE', False)
 
     print("=" * 50)
     print("OpenAI Compatible Audio API 启动中...")
+    if tts_only_mode:
+        print("🚀 TTS专用模式 - 仅启用文本转语音功能")
     print("=" * 50)
 
     print("🔍 检查模型状态...")
@@ -324,18 +346,24 @@ async def startup_event():
         print(f"❌ CosyVoice初始化失败: {e}")
         print("⚠️ TTS功能将不可用")
 
-    # 初始化FunASR
-    try:
-        initialize_funasr(asr_model_name)
-        print("✅ FunASR转录服务已启动")
-    except Exception as e:
-        print(f"❌ FunASR初始化失败: {e}")
-        print("⚠️ ASR功能将不可用")
+    # 初始化FunASR (除非是TTS专用模式)
+    if not tts_only_mode:
+        try:
+            initialize_funasr(asr_model_name)
+            print("✅ FunASR转录服务已启动")
+        except Exception as e:
+            print(f"❌ FunASR初始化失败: {e}")
+            print("⚠️ ASR功能将不可用")
+    else:
+        print("⏭️ TTS专用模式，跳过ASR模型加载")
 
     print("\n" + "=" * 50)
     print("🎉 API服务器启动完成！")
     print(f"🎙️  CosyVoice TTS: {'✅ 可用' if cosyvoice_model else '❌ 不可用'}")
-    print(f"🎧 FunASR 转录: {'✅ 可用' if funasr_model else '❌ 不可用'}")
+    if tts_only_mode:
+        print("🎧 FunASR 转录: ⏭️ TTS专用模式已禁用")
+    else:
+        print(f"🎧 FunASR 转录: {'✅ 可用' if funasr_model else '❌ 不可用'}")
     print("🌐 服务地址: http://127.0.0.1:8000")
     print("📖 API文档: http://127.0.0.1:8000/docs")
     print("=" * 50)
@@ -435,6 +463,10 @@ async def create_transcription(
     Transcribe audio to text using FunASR
     Compatible with OpenAI's /v1/audio/transcriptions endpoint
     """
+    tts_only_mode = globals().get('TTS_ONLY_MODE', False)
+    if tts_only_mode:
+        raise HTTPException(status_code=503, detail="ASR functionality disabled in TTS-only mode")
+
     if funasr_model is None:
         raise HTTPException(status_code=503, detail="FunASR model not available")
 
@@ -522,14 +554,23 @@ if __name__ == "__main__":
     parser.add_argument("--asr-model", type=str, default="paraformer-zh",
                        help="FunASR model name (paraformer-zh, paraformer-zh-streaming)")
     parser.add_argument("--fast", action="store_true",
-                       help="Use faster/smaller models for demo")
+                       help="Use faster/smaller models for demo (enables TTS-only mode)")
+    parser.add_argument("--tts-only", action="store_true",
+                       help="TTS-only mode: only enable text-to-speech, skip ASR for fastest startup")
 
     args = parser.parse_args()
 
     # Apply fast mode
     if args.fast:
-        args.asr_model = "paraformer-zh-streaming"
-        print("🚀 快速模式已启用，使用流式模型")
+        args.tts_only = True
+        print("🚀 快速模式已启用，使用TTS专用模式")
+
+    # Apply TTS-only mode
+    if args.tts_only:
+        globals()['TTS_ONLY_MODE'] = True
+        print("🎙️ TTS专用模式已启用，将跳过ASR模型加载")
+    else:
+        globals()['TTS_ONLY_MODE'] = False
     
     # Override defaults
     globals()['COSYVOICE_MODEL_PATH'] = args.cosyvoice_model
@@ -537,6 +578,9 @@ if __name__ == "__main__":
 
     print(f"Starting OpenAI-compatible API server on {args.host}:{args.port}")
     print(f"CosyVoice model: {args.cosyvoice_model}")
-    print(f"FunASR model: {args.asr_model}")
+    if not args.tts_only:
+        print(f"FunASR model: {args.asr_model}")
+    else:
+        print("ASR model: 已禁用 (TTS专用模式)")
     
     uvicorn.run(app, host=args.host, port=args.port)
