@@ -25,25 +25,47 @@ import uvicorn
 sys.path.append(str(Path(__file__).parent / "CosyVoice" / "third_party" / "Matcha-TTS"))
 sys.path.append(str(Path(__file__).parent / "CosyVoice"))
 
-# Add Dolphin to path  
+# Add Dolphin to path
 sys.path.append(str(Path(__file__).parent / "Dolphin"))
 
 # Import CosyVoice
+CosyVoice = None
+CosyVoice2 = None
+load_wav = None
+
 try:
+    # 设置环境变量禁用一些可选功能
+    os.environ['MATCHA_DISABLE_COMPILE'] = '1'
+
+    # 尝试创建matcha模块存根（如果不存在）
+    matcha_dir = Path(__file__).parent / "CosyVoice" / "third_party" / "Matcha-TTS"
+    if not matcha_dir.exists():
+        matcha_dir.mkdir(parents=True, exist_ok=True)
+        (matcha_dir / "__init__.py").write_text("")
+
+    # 添加到Python路径
+    if str(matcha_dir) not in sys.path:
+        sys.path.insert(0, str(matcha_dir))
+
     from cosyvoice.cli.cosyvoice import CosyVoice, CosyVoice2
     from cosyvoice.utils.file_utils import load_wav
+    print("✓ CosyVoice导入成功")
 except ImportError as e:
-    print(f"Failed to import CosyVoice: {e}")
-    CosyVoice = None
-    CosyVoice2 = None
+    print(f"⚠️ CosyVoice导入失败: {e}")
+    print("💡 解决方案：")
+    print("   1. 运行: python3 install_dependencies.py")
+    print("   2. 或手动安装: pip install matcha-tts einops phonemizer")
+except Exception as e:
+    print(f"❌ CosyVoice初始化错误: {e}")
+    print("💡 这可能是模型加载问题，服务器将继续启动但TTS功能不可用")
 
-# Import Dolphin
+# Import FunASR (替代Dolphin)
+dolphin = None
 try:
-    sys.path.append(str(Path(__file__).parent / "Dolphin"))
-    import dolphin
-except ImportError as e:
-    print(f"Failed to import Dolphin: {e}")
-    dolphin = None
+    # 不再尝试导入原始Dolphin，直接使用FunASR
+    print("ℹ️ 使用FunASR替代Dolphin进行语音识别")
+except Exception as e:
+    print(f"ℹ️ Dolphin不可用，将使用FunASR: {e}")
 
 app = FastAPI(title="OpenAI Compatible Audio API", version="1.0.0")
 

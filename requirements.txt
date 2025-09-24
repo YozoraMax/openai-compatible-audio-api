@@ -45,6 +45,11 @@ tensorboard>=2.14.0
 wetext>=0.0.4
 wget>=3.2
 
+# Matcha-TTS 依赖（CosyVoice需要）
+matcha-tts
+einops
+phonemizer
+
 # Dolphin 依赖
 addict>=2.4.0
 funasr>=1.2.7
