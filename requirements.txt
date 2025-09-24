@@ -51,6 +51,7 @@ wget>=3.2
 matcha-tts
 einops
 phonemizer
+pyworld
 
 # FunASR 依赖
 addict>=2.4.0
