@@ -1,13 +1,13 @@
 # OpenAI Compatible Audio API
 
-OpenAI兼容的音频API服务器，基于CosyVoice (TTS) 和 Dolphin (ASR) 实现。
+OpenAI兼容的音频API服务器，基于CosyVoice (TTS) 和 FunASR (ASR) 实现。
 
 ## 功能特性
 
 - **文本转语音 (TTS)**: 通过 `/v1/audio/speech` 端点使用 CosyVoice
-- **语音转文本 (ASR)**: 通过 `/v1/audio/transcriptions` 端点使用 Dolphin  
+- **语音转文本 (ASR)**: 通过 `/v1/audio/transcriptions` 端点使用 FunASR
 - **OpenAI兼容**: 完全兼容 OpenAI Audio API 格式
-- **多语言支持**: Dolphin 支持40种东方语言和22种中文方言
+- **多语言支持**: FunASR 支持中文、英文等多种语言
 
 ## 项目结构
 
@@ -16,105 +16,35 @@ openai-compatible-audio-api/
 ├── openai_compatible_api.py    # 主API服务器
 ├── requirements.txt            # Python依赖
 ├── download_models.py          # 模型下载脚本
-├── Dockerfile                  # Docker镜像配置
-├── .dockerignore              # Docker忽略文件
 ├── models/                    # 模型存储目录
 │   ├── cosyvoice/            # CosyVoice模型
-│   └── dolphin/              # Dolphin模型
+│   └── dolphin/              # FunASR模型
 ├── CosyVoice/                 # CosyVoice TTS项目
-├── Dolphin/                   # Dolphin ASR项目
 └── README.md                  # 本文件
 ```
 
 ## 部署方式
 
-### 方式1: Docker部署（推荐）
+### Conda环境部署（推荐）
 
-#### 1. 预下载模型到项目目录
-
-```bash
-# 创建虚拟环境
-python3 -m venv myenv
-
-# 激活虚拟环境
-source myenv/bin/activate
-
-# 安装模型下载依赖
-pip install modelscope funasr
-
-# 下载模型到项目目录
-python3 download_models.py
-```
-
-#### 2. 构建Docker镜像
+#### 1. 创建Conda环境
 
 ```bash
-docker build -t openai-audio-api .
-```
+# 创建Python 3.11环境（解决matcha-tts兼容性问题）
+conda create -n myenv311 python=3.11
 
-#### 3. 运行容器
-
-```bash
-# 使用预下载的模型运行（推荐）
-docker run -d \
-  -p 8000:8000 \
-  -v $(pwd)/models/cosyvoice:/app/CosyVoice/pretrained_models \
-  -v $(pwd)/models/dolphin:/root/.cache/dolphin \
-  --name audio-api \
-  --restart unless-stopped \
-  openai-audio-api
-```
-
-#### 4. 验证部署
-
-```bash
-# 检查容器状态
-docker ps
-
-# 查看日志
-docker logs audio-api
-
-# 健康检查
-curl http://localhost:8000/health
-```
-
-#### Docker容器管理
-
-```bash
-# 停止容器
-docker stop audio-api
-
-# 重启容器
-docker restart audio-api
-
-# 删除容器
-docker rm audio-api
-
-# 删除镜像
-docker rmi openai-audio-api
-```
-
-### 方式2: 本地直接运行
-
-#### 1. 安装Python依赖
-
-```bash
-# 推荐使用虚拟环境
-python3 -m venv myenv
-source myenv/bin/activate
+# 激活环境
+conda activate myenv311
 
 # 安装依赖
 pip install -r requirements.txt
 ```
 
-#### 2. 处理编译问题的包 (macOS)
-
-某些包在macOS上可能编译失败，可以跳过：
+#### 2. 预下载模型（可选）
 
 ```bash
-# 可选：安装预编译版本
-pip install editdistance --only-binary=all --prefer-binary || echo "editdistance skipped"
-pip install pyworld --only-binary=all --prefer-binary || echo "pyworld skipped"
+# 如果需要预下载模型到项目目录
+python3 download_models.py
 ```
 
 #### 3. 运行服务器
@@ -128,10 +58,23 @@ python3 openai_compatible_api.py \
   --host 0.0.0.0 \
   --port 8000 \
   --cosyvoice-model "CosyVoice/pretrained_models/CosyVoice2-0.5B" \
-  --dolphin-model "small"
+  --dolphin-model "paraformer-zh"
 ```
 
 默认在 `http://127.0.0.1:8000` 启动服务。
+
+### 环境管理
+
+```bash
+# 激活环境
+conda activate myenv311
+
+# 退出环境
+conda deactivate
+
+# 删除环境
+conda env remove -n myenv311
+```
 
 ## API使用
 
@@ -190,55 +133,54 @@ curl http://127.0.0.1:8000/v1/models
    lsof -ti:8000 | xargs kill -9
    ```
 
-2. **依赖安装失败（权限问题）**
+2. **matcha-tts安装失败（Python 3.12兼容性问题）**
    ```bash
-   # 创建虚拟环境避免权限问题
-   python3 -m venv myenv
-   source myenv/bin/activate
-   pip install modelscope funasr
+   # 解决方案：使用Python 3.11
+   conda create -n myenv311 python=3.11
+   conda activate myenv311
+   pip install -r requirements.txt
    ```
 
-3. **依赖编译失败（macOS）**
-   - 某些包（pyworld, editdistance）在macOS上可能编译失败
-   - 可以跳过这些包，API仍能正常工作（功能可能受限）
+3. **依赖编译失败**
+   ```bash
+   # 某些包可能编译失败，可以跳过
+   pip install editdistance --only-binary=all --prefer-binary || echo "editdistance skipped"
+   ```
 
 4. **模型下载失败**
    - 检查网络连接，确保能访问ModelScope
    - 检查磁盘空间是否充足
-   - 可以使用方案2让容器自动下载模型
+   - 模型会在首次启动时自动下载
 
 5. **内存不足**
-   - CosyVoice和Dolphin模型较大，建议至少8GB内存
+   - CosyVoice和FunASR模型较大，建议至少8GB内存
    - 可以只启用其中一个模型
 
-6. **Docker相关问题**
+6. **Conda环境问题**
    ```bash
-   # 如果预下载模型失败，可以让容器自动下载
-   docker run -d \
-     -p 8000:8000 \
-     -v $(pwd)/models:/app/models \
-     --name audio-api \
-     openai-audio-api
+   # 如果conda未安装，可以下载Miniconda
+   wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
+   bash Miniconda3-latest-Linux-x86_64.sh
 
-   # 查看容器内模型下载进度
-   docker logs -f audio-api
+   # 重新初始化shell
+   source ~/.bashrc
    ```
 
 ## 开发
 
 ### 环境要求
 
-- Python 3.8+
+- Python 3.11（推荐，解决matcha-tts兼容性问题）
+- Conda或Miniconda
 - PyTorch 2.0+
 - 至少8GB内存
 - 网络连接（首次运行下载模型）
-- Docker（推荐使用Docker部署）
 
 ### 代码结构
 
 - `openai_compatible_api.py`: 主API服务器
 - `initialize_cosyvoice()`: CosyVoice模型初始化
-- `initialize_dolphin()`: Dolphin模型初始化
+- `initialize_dolphin()`: FunASR模型初始化
 - `/v1/audio/speech`: TTS端点实现
 - `/v1/audio/transcriptions`: ASR端点实现
 
@@ -246,10 +188,10 @@ curl http://127.0.0.1:8000/v1/models
 
 本项目遵循相关开源项目的许可证：
 - CosyVoice: Apache 2.0
-- Dolphin: 请查看Dolphin项目许可证
+- FunASR: 请查看FunASR项目许可证
 
 ## 致谢
 
 - [CosyVoice](https://github.com/FunAudioLLM/CosyVoice) - 阿里巴巴达摩院文本转语音模型
-- [Dolphin](https://github.com/DataoceanAI/Dolphin) - DataoceanAI语音识别模型
+- [FunASR](https://github.com/modelscope/FunASR) - 达摩院语音识别工具包
 - [FastAPI](https://fastapi.tiangolo.com/) - 现代Web框架
