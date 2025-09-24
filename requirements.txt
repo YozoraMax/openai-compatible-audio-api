@@ -17,8 +17,10 @@ pydub
 
 # 模型加载和工具
 modelscope>=1.0.0
-transformers>=4.44.0
-numpy
+transformers==4.38.0
+huggingface_hub==0.19.4
+tokenizers==0.15.2
+numpy==1.25.2
 pyyaml
 
 # CosyVoice 核心依赖

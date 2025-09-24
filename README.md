@@ -14,12 +14,14 @@ OpenAI兼容的音频API服务器，基于CosyVoice (TTS) 和 FunASR (ASR) 实�
 ```
 openai-compatible-audio-api/
 ├── openai_compatible_api.py    # 主API服务器
-├── requirements.txt            # Python依赖
-├── models/                    # 模型存储目录（自动创建）
-│   ├── cosyvoice/            # CosyVoice模型（自动下载）
-│   └── dolphin/              # FunASR模型（自动下载）
-├── CosyVoice/                 # CosyVoice TTS项目（自动创建）
-└── README.md                  # 本文件
+├── requirements.txt            # Python依赖文件
+├── README.md                  # 项目说明文档
+├── .gitignore                 # Git忽略文件配置
+├── CosyVoice/                 # CosyVoice TTS项目（自动下载）
+├── Dolphin/                   # Dolphin项目目录
+└── models/                    # 模型存储目录（运行时自动创建）
+    ├── cosyvoice/            # CosyVoice模型文件
+    └── dolphin/              # FunASR模型缓存
 ```
 
 ## 部署方式
@@ -39,10 +41,10 @@ conda activate myenv311
 pip install -r requirements.txt
 ```
 
-#### 2. 运行服务器
+#### 2. 启动服务
 
 ```bash
-# 基本运行
+# 基本运行（推荐）
 python3 openai_compatible_api.py
 
 # 自定义配置
@@ -53,7 +55,11 @@ python3 openai_compatible_api.py \
   --dolphin-model "paraformer-zh"
 ```
 
-默认在 `http://127.0.0.1:8000` 启动服务。
+**首次启动说明：**
+- 服务会自动检测并下载必要的模型文件
+- CosyVoice模型约2GB，FunASR模型约1GB
+- 下载完成后会自动启动API服务
+- 默认服务地址：`http://127.0.0.1:8000`
 
 ### 环境管理
 
@@ -64,7 +70,7 @@ conda activate myenv311
 # 退出环境
 conda deactivate
 
-# 删除环境
+# 删除环境（如需重新安装）
 conda env remove -n myenv311
 ```
 
