@@ -397,26 +397,58 @@ async def create_speech(request: TTSRequest):
         
         # Generate speech
         speech_data = None
+
+        # Try SFT mode first (most reliable)
         if hasattr(cosyvoice_model, 'inference_sft') and available_spks:
-            # Use SFT mode if available
-            for i, output in enumerate(cosyvoice_model.inference_sft(
-                request.input, speaker, stream=False, speed=request.speed
-            )):
-                speech_data = output['tts_speech']
-                break
-        elif hasattr(cosyvoice_model, 'inference_zero_shot'):
-            # Use zero-shot mode with default prompt
-            prompt_path = Path(__file__).parent / "CosyVoice" / "asset" / "zero_shot_prompt.wav"
-            if prompt_path.exists():
-                prompt_speech = load_wav(str(prompt_path), 16000)
-                for i, output in enumerate(cosyvoice_model.inference_zero_shot(
-                    request.input, "希望你以后能够做的比我还好呦。", prompt_speech, 
-                    stream=False, speed=request.speed
+            try:
+                print(f"🎤 使用SFT模式生成语音，说话人: {speaker}")
+                for i, output in enumerate(cosyvoice_model.inference_sft(
+                    request.input, speaker, stream=False, speed=request.speed
                 )):
                     speech_data = output['tts_speech']
                     break
-            else:
-                raise HTTPException(status_code=500, detail="No prompt audio found for zero-shot")
+            except Exception as e:
+                print(f"⚠️ SFT模式失败: {e}")
+
+        # Fallback to zero-shot mode if SFT failed
+        if speech_data is None and hasattr(cosyvoice_model, 'inference_zero_shot'):
+            # Try to find prompt audio file
+            prompt_paths = [
+                Path(__file__).parent / "CosyVoice" / "asset" / "zero_shot_prompt.wav",
+                Path(__file__).parent / "CosyVoice" / "zero_shot_prompt.wav",
+                Path(__file__).parent / "zero_shot_prompt.wav"
+            ]
+
+            prompt_path = None
+            for path in prompt_paths:
+                if path.exists():
+                    prompt_path = path
+                    break
+
+            if prompt_path:
+                try:
+                    print(f"🎤 使用零样本模式生成语音，提示音频: {prompt_path}")
+                    prompt_speech = load_wav(str(prompt_path), 16000)
+                    for i, output in enumerate(cosyvoice_model.inference_zero_shot(
+                        request.input, "希望你以后能够做的比我还好呦。", prompt_speech,
+                        stream=False, speed=request.speed
+                    )):
+                        speech_data = output['tts_speech']
+                        break
+                except Exception as e:
+                    print(f"⚠️ 零样本模式失败: {e}")
+
+        # Final fallback: try inference method if it exists
+        if speech_data is None and hasattr(cosyvoice_model, 'inference'):
+            try:
+                print("🎤 使用基础推理模式生成语音")
+                for i, output in enumerate(cosyvoice_model.inference(
+                    request.input, stream=False, speed=request.speed
+                )):
+                    speech_data = output['tts_speech']
+                    break
+            except Exception as e:
+                print(f"⚠️ 基础推理模式失败: {e}")
         
         if speech_data is None:
             raise HTTPException(status_code=500, detail="Failed to generate speech")
