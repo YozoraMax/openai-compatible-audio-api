@@ -33,8 +33,14 @@ openai-compatible-audio-api/
 #### 1. 预下载模型到项目目录
 
 ```bash
-# 安装模型下载依赖（使用--user避免权限问题）
-python3 -m pip install --user modelscope funasr
+# 创建虚拟环境
+python3 -m venv myenv
+
+# 激活虚拟环境
+source myenv/bin/activate
+
+# 安装模型下载依赖
+pip install modelscope funasr
 
 # 下载模型到项目目录
 python3 download_models.py
@@ -93,6 +99,11 @@ docker rmi openai-audio-api
 #### 1. 安装Python依赖
 
 ```bash
+# 推荐使用虚拟环境
+python3 -m venv myenv
+source myenv/bin/activate
+
+# 安装依赖
 pip install -r requirements.txt
 ```
 
@@ -181,8 +192,10 @@ curl http://127.0.0.1:8000/v1/models
 
 2. **依赖安装失败（权限问题）**
    ```bash
-   # 使用--user选项避免权限问题
-   python3 -m pip install --user modelscope funasr
+   # 创建虚拟环境避免权限问题
+   python3 -m venv myenv
+   source myenv/bin/activate
+   pip install modelscope funasr
    ```
 
 3. **依赖编译失败（macOS）**

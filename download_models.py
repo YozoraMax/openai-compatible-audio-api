@@ -49,6 +49,7 @@ def download_dolphin_model():
         # 设置缓存目录
         os.environ['FUNASR_CACHE_HOME'] = model_dir
 
+        print("初始化ASR模型...")
         # 下载ASR模型 (使用FunASR支持的模型)
         model = AutoModel(
             model="paraformer-zh",
@@ -58,11 +59,13 @@ def download_dolphin_model():
         print(f"Dolphin ASR模型下载完成: {model_dir}")
         return True
 
-    except ImportError:
-        print("funasr未安装，请先运行: pip install funasr")
+    except ImportError as e:
+        print(f"funasr导入失败: {e}")
+        print("请确认funasr已正确安装: pip install funasr")
         return False
     except Exception as e:
         print(f"Dolphin模型下载失败: {e}")
+        print("可能的原因：网络连接问题或模型仓库访问受限")
         return False
 
 def main():
