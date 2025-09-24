@@ -203,6 +203,43 @@ class TTSRequest(BaseModel):
 class TranscriptionResponse(BaseModel):
     text: str
 
+def create_default_prompt_audio():
+    """创建默认的零样本提示音频文件"""
+    try:
+        import numpy as np
+
+        # 创建一个简单的正弦波作为默认提示音频（1秒，16kHz）
+        sample_rate = 16000
+        duration = 1.0  # 1秒
+        frequency = 220  # 低音A，更接近人声
+
+        t = np.linspace(0, duration, int(sample_rate * duration), False)
+        # 创建一个复合波形，模拟简单语音
+        audio = (np.sin(2 * np.pi * frequency * t) * 0.5 +
+                np.sin(2 * np.pi * frequency * 2 * t) * 0.3 +
+                np.sin(2 * np.pi * frequency * 3 * t) * 0.2)
+
+        # 添加包络，使其更像语音
+        envelope = np.exp(-t * 1.5) * (1 - np.exp(-t * 10))
+        audio = audio * envelope * 0.3
+
+        # 转换为torch tensor
+        audio_tensor = torch.from_numpy(audio).float().unsqueeze(0)
+
+        # 保存音频文件
+        asset_dir = Path(__file__).parent / "CosyVoice" / "asset"
+        asset_dir.mkdir(parents=True, exist_ok=True)
+
+        output_path = asset_dir / "zero_shot_prompt.wav"
+        torchaudio.save(str(output_path), audio_tensor, sample_rate)
+
+        print(f"✅ 默认提示音频文件已创建: {output_path}")
+        return output_path
+
+    except Exception as e:
+        print(f"⚠️ 创建默认提示音频失败: {e}")
+        return None
+
 def initialize_cosyvoice(model_path: str = "CosyVoice/pretrained_models/CosyVoice2-0.5B"):
     """Initialize CosyVoice model"""
     global cosyvoice_model
@@ -252,6 +289,15 @@ def initialize_cosyvoice(model_path: str = "CosyVoice/pretrained_models/CosyVoic
 
         elapsed = time.time() - start_time
         print(f"✅ {model_type} 模型加载完成 (耗时: {elapsed:.1f}秒)")
+
+        # 检查并创建默认提示音频文件（用于零样本推理）
+        prompt_path = Path(__file__).parent / "CosyVoice" / "asset" / "zero_shot_prompt.wav"
+        if not prompt_path.exists():
+            print("🎵 零样本提示音频文件不存在，正在创建默认文件...")
+            create_default_prompt_audio()
+        else:
+            print(f"✅ 零样本提示音频文件已存在: {prompt_path}")
+
     except Exception as e:
         raise RuntimeError(f"Failed to load CosyVoice model: {e}")
 
@@ -413,6 +459,7 @@ async def create_speech(request: TTSRequest):
 
         # Helper function for zero-shot inference
         def try_zero_shot_inference():
+            # Try to find existing prompt audio files
             prompt_paths = [
                 Path(__file__).parent / "CosyVoice" / "asset" / "zero_shot_prompt.wav",
                 Path(__file__).parent / "CosyVoice" / "zero_shot_prompt.wav",
@@ -422,6 +469,7 @@ async def create_speech(request: TTSRequest):
             for path in prompt_paths:
                 if path.exists():
                     try:
+                        print(f"🎵 找到提示音频文件: {path}")
                         prompt_speech = load_wav(str(path), 16000)
                         return cosyvoice_model.inference_zero_shot(
                             request.input, "希望你以后能够做的比我还好呦。", prompt_speech,
@@ -430,11 +478,25 @@ async def create_speech(request: TTSRequest):
                     except Exception as e:
                         print(f"⚠️ 零样本模式路径 {path} 失败: {e}")
                         continue
-            return None
+
+            # If no prompt file found, try to create a simple synthetic one
+            print("📝 未找到提示音频文件，尝试使用空提示进行零样本推理")
+            try:
+                # Some CosyVoice2 models support inference without explicit prompt audio
+                return cosyvoice_model.inference_zero_shot(
+                    request.input, "希望你以后能够做的比我还好呦。", None,
+                    stream=False, speed=request.speed
+                )
+            except Exception as e:
+                print(f"⚠️ 无提示音频零样本推理失败: {e}")
+                return None
 
         # Try different inference methods based on what's available
+        # For CosyVoice2-0.5B, prioritize cross_lingual and instruct modes
         inference_methods = [
             ('inference_sft', lambda: cosyvoice_model.inference_sft(request.input, speaker, stream=False, speed=request.speed) if available_spks else None),
+            ('inference_cross_lingual', lambda: cosyvoice_model.inference_cross_lingual(request.input, None, stream=False) if hasattr(cosyvoice_model, 'inference_cross_lingual') else None),
+            ('inference_instruct2', lambda: cosyvoice_model.inference_instruct2(request.input, '用自然的语调说这句话', None, stream=False) if hasattr(cosyvoice_model, 'inference_instruct2') else None),
             ('inference_zero_shot', try_zero_shot_inference),
             ('inference', lambda: cosyvoice_model.inference(request.input, stream=False, speed=request.speed)),
             ('tts', lambda: cosyvoice_model.tts(request.input, speaker=speaker)),
@@ -446,8 +508,13 @@ async def create_speech(request: TTSRequest):
                 try:
                     print(f"🎤 尝试 {method_name} 模式生成语音...")
 
+                    # Skip methods that require unavailable resources
                     if method_name == 'inference_sft' and not available_spks:
                         print(f"⏭️ 跳过 {method_name}：无可用说话人")
+                        continue
+
+                    if method_name in ['inference_cross_lingual', 'inference_instruct2'] and not hasattr(cosyvoice_model, method_name):
+                        print(f"⏭️ 跳过 {method_name}：方法不可用")
                         continue
 
                     result = method_func()
