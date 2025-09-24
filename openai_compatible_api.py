@@ -390,65 +390,94 @@ async def create_speech(request: TTSRequest):
         
         speaker = voice_mapping.get(request.voice, "中文女")
         
-        # Check available speakers
-        available_spks = cosyvoice_model.list_available_spks()
+        # Check available speakers and methods
+        print(f"🔍 检查CosyVoice模型可用方法...")
+        available_methods = [method for method in dir(cosyvoice_model) if not method.startswith('_')]
+        print(f"📋 可用方法: {available_methods}")
+
+        available_spks = None
+        try:
+            available_spks = cosyvoice_model.list_available_spks()
+            print(f"🎭 可用说话人: {available_spks}")
+        except Exception as e:
+            print(f"⚠️ 获取说话人列表失败: {e}")
+
         if available_spks and speaker not in available_spks:
             speaker = available_spks[0] if available_spks else "中文女"
+            print(f"🔄 切换到可用说话人: {speaker}")
+        else:
+            print(f"🎭 使用说话人: {speaker}")
         
         # Generate speech
         speech_data = None
 
-        # Try SFT mode first (most reliable)
-        if hasattr(cosyvoice_model, 'inference_sft') and available_spks:
-            try:
-                print(f"🎤 使用SFT模式生成语音，说话人: {speaker}")
-                for i, output in enumerate(cosyvoice_model.inference_sft(
-                    request.input, speaker, stream=False, speed=request.speed
-                )):
-                    speech_data = output['tts_speech']
-                    break
-            except Exception as e:
-                print(f"⚠️ SFT模式失败: {e}")
-
-        # Fallback to zero-shot mode if SFT failed
-        if speech_data is None and hasattr(cosyvoice_model, 'inference_zero_shot'):
-            # Try to find prompt audio file
+        # Helper function for zero-shot inference
+        def try_zero_shot_inference():
             prompt_paths = [
                 Path(__file__).parent / "CosyVoice" / "asset" / "zero_shot_prompt.wav",
                 Path(__file__).parent / "CosyVoice" / "zero_shot_prompt.wav",
                 Path(__file__).parent / "zero_shot_prompt.wav"
             ]
 
-            prompt_path = None
             for path in prompt_paths:
                 if path.exists():
-                    prompt_path = path
-                    break
+                    try:
+                        prompt_speech = load_wav(str(path), 16000)
+                        return cosyvoice_model.inference_zero_shot(
+                            request.input, "希望你以后能够做的比我还好呦。", prompt_speech,
+                            stream=False, speed=request.speed
+                        )
+                    except Exception as e:
+                        print(f"⚠️ 零样本模式路径 {path} 失败: {e}")
+                        continue
+            return None
 
-            if prompt_path:
+        # Try different inference methods based on what's available
+        inference_methods = [
+            ('inference_sft', lambda: cosyvoice_model.inference_sft(request.input, speaker, stream=False, speed=request.speed) if available_spks else None),
+            ('inference_zero_shot', try_zero_shot_inference),
+            ('inference', lambda: cosyvoice_model.inference(request.input, stream=False, speed=request.speed)),
+            ('tts', lambda: cosyvoice_model.tts(request.input, speaker=speaker)),
+            ('generate', lambda: cosyvoice_model.generate(request.input)),
+        ]
+
+        for method_name, method_func in inference_methods:
+            if hasattr(cosyvoice_model, method_name) and speech_data is None:
                 try:
-                    print(f"🎤 使用零样本模式生成语音，提示音频: {prompt_path}")
-                    prompt_speech = load_wav(str(prompt_path), 16000)
-                    for i, output in enumerate(cosyvoice_model.inference_zero_shot(
-                        request.input, "希望你以后能够做的比我还好呦。", prompt_speech,
-                        stream=False, speed=request.speed
-                    )):
-                        speech_data = output['tts_speech']
-                        break
-                except Exception as e:
-                    print(f"⚠️ 零样本模式失败: {e}")
+                    print(f"🎤 尝试 {method_name} 模式生成语音...")
 
-        # Final fallback: try inference method if it exists
-        if speech_data is None and hasattr(cosyvoice_model, 'inference'):
-            try:
-                print("🎤 使用基础推理模式生成语音")
-                for i, output in enumerate(cosyvoice_model.inference(
-                    request.input, stream=False, speed=request.speed
-                )):
-                    speech_data = output['tts_speech']
-                    break
-            except Exception as e:
-                print(f"⚠️ 基础推理模式失败: {e}")
+                    if method_name == 'inference_sft' and not available_spks:
+                        print(f"⏭️ 跳过 {method_name}：无可用说话人")
+                        continue
+
+                    result = method_func()
+                    if result is None:
+                        continue
+
+                    # Handle different result formats
+                    if hasattr(result, '__iter__') and not isinstance(result, (str, bytes)):
+                        for i, output in enumerate(result):
+                            if isinstance(output, dict) and 'tts_speech' in output:
+                                speech_data = output['tts_speech']
+                                break
+                            elif hasattr(output, 'audio') or hasattr(output, 'speech'):
+                                speech_data = getattr(output, 'audio', getattr(output, 'speech', None))
+                                break
+                            elif isinstance(output, torch.Tensor):
+                                speech_data = output
+                                break
+                    elif isinstance(result, torch.Tensor):
+                        speech_data = result
+                    elif isinstance(result, dict) and 'tts_speech' in result:
+                        speech_data = result['tts_speech']
+
+                    if speech_data is not None:
+                        print(f"✅ {method_name} 模式生成成功")
+                        break
+
+                except Exception as e:
+                    print(f"⚠️ {method_name} 模式失败: {e}")
+                    continue
         
         if speech_data is None:
             raise HTTPException(status_code=500, detail="Failed to generate speech")
