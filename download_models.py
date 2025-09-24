@@ -22,15 +22,14 @@ def download_cosyvoice_model():
         # 下载CosyVoice-0.5B模型
         model_path = snapshot_download(
             'iic/CosyVoice2-0.5B',
-            cache_dir=model_dir,
-            revision='v2.0.4'
+            cache_dir=model_dir
         )
 
         print(f"CosyVoice模型下载完成: {model_path}")
         return True
 
     except ImportError:
-        print("modelscope未安装，请先运行: pip install --user modelscope")
+        print("modelscope未安装，请先运行: pip install modelscope")
         return False
     except Exception as e:
         print(f"CosyVoice模型下载失败: {e}")
@@ -53,7 +52,6 @@ def download_dolphin_model():
         # 下载ASR模型 (使用FunASR支持的模型)
         model = AutoModel(
             model="paraformer-zh",
-            model_revision="v2.0.4",
             cache_dir=model_dir
         )
 
@@ -61,7 +59,7 @@ def download_dolphin_model():
         return True
 
     except ImportError:
-        print("funasr未安装，请先运行: pip install --user funasr")
+        print("funasr未安装，请先运行: pip install funasr")
         return False
     except Exception as e:
         print(f"Dolphin模型下载失败: {e}")
