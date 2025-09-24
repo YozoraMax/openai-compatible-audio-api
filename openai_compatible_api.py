@@ -274,9 +274,9 @@ def initialize_funasr(model_name: str = "paraformer-zh"):
 
         # 小模型映射 - 使用FunASR实际支持的模型名称
         model_sizes = {
-            "paraformer-zh": "大模型 (~1GB)",
-            "iic/speech_paraformer-zh_asr_nat-zh-cn-16k-common-vocab8404-pytorch": "标准中文模型 (~1GB)",
-            "iic/speech_paraformer_asr_nat-zh-cn-16k-common-vocab8404": "轻量模型 (~500MB)",
+            "paraformer-zh": "标准中文模型 (~1GB)",
+            "iic/speech_paraformer-zh-small_asr_nat-zh-cn-16k-common-vocab8404-pytorch": "小模型 (~300MB)",
+            "paraformer-zh-streaming": "流式模型 (~500MB)",
             "paraformer-en": "英文模型 (~800MB)"
         }
 
@@ -520,7 +520,7 @@ if __name__ == "__main__":
                        default="CosyVoice/pretrained_models/CosyVoice2-0.5B",
                        help="CosyVoice model path")
     parser.add_argument("--asr-model", type=str, default="paraformer-zh",
-                       help="FunASR model name (paraformer-zh, iic/speech_paraformer_asr_nat-zh-cn-16k-common-vocab8404)")
+                       help="FunASR model name (paraformer-zh, paraformer-zh-streaming)")
     parser.add_argument("--fast", action="store_true",
                        help="Use faster/smaller models for demo")
 
@@ -528,8 +528,8 @@ if __name__ == "__main__":
 
     # Apply fast mode
     if args.fast:
-        args.asr_model = "iic/speech_paraformer_asr_nat-zh-cn-16k-common-vocab8404"
-        print("🚀 快速模式已启用，使用轻量模型")
+        args.asr_model = "paraformer-zh-streaming"
+        print("🚀 快速模式已启用，使用流式模型")
     
     # Override defaults
     globals()['COSYVOICE_MODEL_PATH'] = args.cosyvoice_model

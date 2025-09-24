@@ -55,14 +55,14 @@ python3 openai_compatible_api.py \
   --host 0.0.0.0 \
   --port 8000 \
   --cosyvoice-model "CosyVoice/pretrained_models/CosyVoice2-0.5B" \
-  --asr-model "iic/speech_paraformer_asr_nat-zh-cn-16k-common-vocab8404"
+  --asr-model "paraformer-zh-streaming"
 ```
 
 **启动选项说明：**
-- `--fast`: 快速模式，使用轻量模型，启动更快
+- `--fast`: 快速模式，使用流式模型，启动更快
 - `--asr-model`: 指定ASR模型
-  - `paraformer-zh`: 大模型 (~1GB，高精度)
-  - `iic/speech_paraformer_asr_nat-zh-cn-16k-common-vocab8404`: 轻量模型 (~500MB，快速启动)
+  - `paraformer-zh`: 标准中文模型 (~1GB，高精度)
+  - `paraformer-zh-streaming`: 流式模型 (~500MB，快速启动，低延迟)
 
 **首次启动说明：**
 - 服务会自动检测并下载必要的模型文件
@@ -170,8 +170,8 @@ curl http://127.0.0.1:8000/v1/models
    # 使用小模型快速启动
    python3 openai_compatible_api.py --fast
 
-   # 或手动指定轻量模型
-   python3 openai_compatible_api.py --asr-model iic/speech_paraformer_asr_nat-zh-cn-16k-common-vocab8404
+   # 或手动指定流式模型
+   python3 openai_compatible_api.py --asr-model paraformer-zh-streaming
    ```
 
 7. **Conda环境问题**
