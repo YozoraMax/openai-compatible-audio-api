@@ -1,0 +1,66 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Model cache directories
+.cache/
+*.pt
+*.pth
+*.onnx
+*.bin
+
+# CosyVoice model directories
+CosyVoice/pretrained_models/
+CosyVoice/zero_shot_prompt.wav
+
+# Dolphin cache
+.cache/dolphin/
+
+# Temporary files
+*.tmp
+*.temp
+*.wav
+*.mp3
+*.mp4
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# macOS
+.DS_Store
+
+# Logs
+*.log
+
+# Large model files
+*.safetensors
