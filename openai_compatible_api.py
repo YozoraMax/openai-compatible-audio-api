@@ -149,14 +149,23 @@ def check_and_download_models(cosyvoice_model_path: str = "models/cosyvoice/Cosy
             os.environ['FUNASR_CACHE_HOME'] = str(model_dir)
             os.environ['MODELSCOPE_CACHE'] = str(model_dir)
             
-            # 确保模型下载到指定位置（不设置离线模式，允许下载）
-            print(f"⬇️ 初始化FunASR模型（将下载到: {model_dir}）...")
-            test_model = AutoModel(
-                model="paraformer-zh", 
-                cache_dir=str(model_dir), 
-                model_revision=None,  # 使用默认版本
-                disable_update=True
-            )
+            # 检查是否存在本地模型文件，直接使用本地路径
+            local_model_path = model_dir / "models" / "iic" / "speech_seaco_paraformer_large_asr_nat-zh-cn-16k-common-vocab8404-pytorch"
+            if local_model_path.exists():
+                print(f"🎯 使用本地模型: {local_model_path}")
+                test_model = AutoModel(
+                    model=str(local_model_path),  # 直接使用本地路径
+                    disable_update=True
+                )
+            else:
+                # 确保模型下载到指定位置
+                print(f"⬇️ 初始化FunASR模型（将下载到: {model_dir}）...")
+                test_model = AutoModel(
+                    model="paraformer-zh", 
+                    cache_dir=str(model_dir), 
+                    model_revision=None,  # 使用默认版本
+                    disable_update=True
+                )
             print("✅ FunASR模型下载并准备就绪")
             funasr_ready = True
 
@@ -358,12 +367,22 @@ def initialize_funasr(model_name: str = "paraformer-zh"):
         progress_thread.start()
 
         try:
-            funasr_model = AutoModel(
-                model=model_name, 
-                cache_dir=str(model_dir), 
-                model_revision=None,  # 使用默认版本
-                disable_update=True
-            )
+            # 检查是否存在本地模型文件，直接使用本地路径
+            local_model_path = model_dir / "models" / "iic" / "speech_seaco_paraformer_large_asr_nat-zh-cn-16k-common-vocab8404-pytorch"
+            if local_model_path.exists():
+                print(f"🎯 使用本地模型: {local_model_path}")
+                funasr_model = AutoModel(
+                    model=str(local_model_path),  # 直接使用本地路径
+                    disable_update=True
+                )
+            else:
+                # 回退到原始方法
+                funasr_model = AutoModel(
+                    model=model_name, 
+                    cache_dir=str(model_dir), 
+                    model_revision=None,  # 使用默认版本
+                    disable_update=True
+                )
         finally:
             progress_indicator.stop = True
             print("\r", end='')  # 清除进度指示器
