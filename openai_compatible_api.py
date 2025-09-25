@@ -378,6 +378,16 @@ async def create_speech(request: TTSRequest):
     Create speech from text using CosyVoice
     Compatible with OpenAI's /v1/audio/speech endpoint
     """
+    # 记录请求体参数
+    print("=" * 60)
+    print("📥 收到TTS请求:")
+    print(f"   模型: {request.model}")
+    print(f"   文本: {request.input}")
+    print(f"   声音: {request.voice}")
+    print(f"   格式: {request.response_format}")
+    print(f"   速度: {request.speed}")
+    print("=" * 60)
+    
     if cosyvoice_model is None:
         raise HTTPException(status_code=503, detail="CosyVoice model not available")
     
@@ -415,8 +425,8 @@ async def create_speech(request: TTSRequest):
         # Generate speech
         speech_data = None
 
-        # Helper function for zero-shot inference
-        def try_zero_shot_inference():
+        # Helper function to get prompt audio for various inference methods
+        def get_prompt_audio():
             # Try multiple possible locations for zero-shot prompt audio
             potential_paths = [
                 Path(__file__).parent / "models" / "cosyvoice" / "asset" / "zero_shot_prompt.wav",  # Local models dir
@@ -432,19 +442,25 @@ async def create_speech(request: TTSRequest):
                 
             for prompt_path in potential_paths:
                 if prompt_path.exists():
-                    prompt_speech = load_wav(str(prompt_path), 16000)
-                    return cosyvoice_model.inference_zero_shot(
-                        request.input, "希望你以后能够做的比我还好呦。", prompt_speech,
-                        stream=False, speed=request.speed
-                    )
+                    return load_wav(str(prompt_path), 16000)
+            return None
+
+        # Helper function for zero-shot inference
+        def try_zero_shot_inference():
+            prompt_speech = get_prompt_audio()
+            if prompt_speech is not None:
+                return cosyvoice_model.inference_zero_shot(
+                    request.input, "希望你以后能够做的比我还好呦。", prompt_speech,
+                    stream=False, speed=request.speed
+                )
             return None
 
         # Try different inference methods based on what's available
         # For CosyVoice2-0.5B, prioritize cross_lingual and instruct modes
         inference_methods = [
             ('inference_sft', lambda: cosyvoice_model.inference_sft(request.input, speaker, stream=False, speed=request.speed) if available_spks else None),
-            ('inference_cross_lingual', lambda: cosyvoice_model.inference_cross_lingual(request.input, stream=False) if hasattr(cosyvoice_model, 'inference_cross_lingual') else None),
-            ('inference_instruct2', lambda: cosyvoice_model.inference_instruct2(request.input, '用自然的语调说这句话', stream=False) if hasattr(cosyvoice_model, 'inference_instruct2') else None),
+            ('inference_cross_lingual', lambda: cosyvoice_model.inference_cross_lingual(request.input, get_prompt_audio(), stream=False) if hasattr(cosyvoice_model, 'inference_cross_lingual') and get_prompt_audio() is not None else None),
+            ('inference_instruct2', lambda: cosyvoice_model.inference_instruct2(request.input, '用自然的语调说这句话', get_prompt_audio(), stream=False) if hasattr(cosyvoice_model, 'inference_instruct2') and get_prompt_audio() is not None else None),
             ('inference_zero_shot', try_zero_shot_inference),
             ('inference', lambda: cosyvoice_model.inference(request.input, stream=False, speed=request.speed) if hasattr(cosyvoice_model, 'inference') else None),
             ('tts', lambda: cosyvoice_model.tts(request.input, speaker=speaker) if hasattr(cosyvoice_model, 'tts') else None),
@@ -539,6 +555,18 @@ async def create_transcription(
     Transcribe audio to text using FunASR
     Compatible with OpenAI's /v1/audio/transcriptions endpoint
     """
+    # 记录请求体参数
+    print("=" * 60)
+    print("📥 收到ASR请求:")
+    print(f"   文件名: {file.filename}")
+    print(f"   文件类型: {file.content_type}")
+    print(f"   模型: {model}")
+    print(f"   语言: {language}")
+    print(f"   提示: {prompt}")
+    print(f"   返回格式: {response_format}")
+    print(f"   温度: {temperature}")
+    print("=" * 60)
+    
     tts_only_mode = globals().get('TTS_ONLY_MODE', False)
     if tts_only_mode:
         raise HTTPException(status_code=503, detail="ASR functionality disabled in TTS-only mode")
