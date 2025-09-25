@@ -75,6 +75,31 @@ def find_cosyvoice_model_path(expected_model_path: str = "models/cosyvoice/CosyV
     
     return None
 
+def check_funasr_model_exists(model_dir: Path) -> bool:
+    """检查FunASR模型是否已存在于指定目录"""
+    try:
+        # 常见的FunASR模型文件模式
+        model_patterns = [
+            "**/paraformer*",
+            "**/speech_*",
+            "**/*.safetensors",
+            "**/*.bin",
+            "**/pytorch_model.bin",
+            "**/config.yaml"
+        ]
+        
+        for pattern in model_patterns:
+            found_files = list(model_dir.glob(pattern))
+            if found_files:
+                print(f"✓ 找到FunASR模型文件: {len(found_files)} 个文件匹配 {pattern}")
+                return True
+        
+        print("✗ 未找到FunASR模型文件")
+        return False
+    except Exception as e:
+        print(f"✗ 检查FunASR模型失败: {e}")
+        return False
+
 def check_and_download_models(cosyvoice_model_path: str = "models/cosyvoice/CosyVoice2-0.5B"):
     """检查并下载必要的模型到统一的models目录"""
     print("📁 检查并创建models目录结构...")
@@ -105,24 +130,50 @@ def check_and_download_models(cosyvoice_model_path: str = "models/cosyvoice/Cosy
     funasr_ready = False
     try:
         from funasr import AutoModel
-        # 简单检查是否可以初始化模型（会自动下载）
         print("🔍 检查FunASR模型...")
         model_dir = models_dir / "funasr"
         model_dir.mkdir(parents=True, exist_ok=True)
 
-        # 设置缓存目录
-        os.environ['FUNASR_CACHE_HOME'] = str(model_dir)
-
-        # 尝试加载模型（如果不存在会自动下载）
-        print("⬇️ 初始化FunASR模型（如需要会自动下载到models/funasr）...")
-        test_model = AutoModel(model="paraformer-zh", cache_dir=str(model_dir))
-        print("✅ FunASR模型准备就绪")
-        funasr_ready = True
+        # 先检查模型是否已存在
+        if check_funasr_model_exists(model_dir):
+            print("✅ FunASR模型已存在，跳过下载")
+            funasr_ready = True
+        else:
+            # 清理可能影响下载路径的环境变量
+            env_vars_to_clear = ['MODELSCOPE_CACHE', 'HF_HOME', 'HF_CACHE_HOME', 'TRANSFORMERS_CACHE', 'HUGGINGFACE_HUB_CACHE']
+            for var in env_vars_to_clear:
+                if var in os.environ:
+                    del os.environ[var]
+            
+            # 强制设置FunASR缓存目录到我们的models目录
+            os.environ['FUNASR_CACHE_HOME'] = str(model_dir)
+            os.environ['MODELSCOPE_CACHE'] = str(model_dir)
+            
+            # 检查是否存在本地模型文件，直接使用本地路径
+            local_model_path = model_dir / "models" / "iic" / "speech_seaco_paraformer_large_asr_nat-zh-cn-16k-common-vocab8404-pytorch"
+            if local_model_path.exists():
+                print(f"🎯 使用本地模型: {local_model_path}")
+                test_model = AutoModel(
+                    model=str(local_model_path),  # 直接使用本地路径
+                    disable_update=True
+                )
+            else:
+                # 确保模型下载到指定位置
+                print(f"⬇️ 初始化FunASR模型（将下载到: {model_dir}）...")
+                test_model = AutoModel(
+                    model="paraformer-zh", 
+                    cache_dir=str(model_dir), 
+                    model_revision=None,  # 使用默认版本
+                    disable_update=True
+                )
+            print("✅ FunASR模型下载并准备就绪")
+            funasr_ready = True
 
     except ImportError:
         print("✗ FunASR未安装，请运行: pip install funasr")
     except Exception as e:
         print(f"✗ FunASR模型初始化失败: {e}")
+        print("💡 建议：如果是网络问题，可以使用 --tts-only 参数启动仅TTS模式")
 
     return cosyvoice_ready, funasr_ready
 
@@ -270,10 +321,22 @@ def initialize_funasr(model_name: str = "paraformer-zh"):
         model_dir = Path(__file__).parent / "models" / "funasr"
         model_dir.mkdir(parents=True, exist_ok=True)
 
-        # 设置缓存目录
+        # 清理可能影响下载路径的环境变量
+        env_vars_to_clear = ['MODELSCOPE_CACHE', 'HF_HOME', 'HF_CACHE_HOME', 'TRANSFORMERS_CACHE', 'HUGGINGFACE_HUB_CACHE']
+        for var in env_vars_to_clear:
+            if var in os.environ:
+                del os.environ[var]
+        
+        # 强制设置FunASR缓存目录到我们的models目录
         os.environ['FUNASR_CACHE_HOME'] = str(model_dir)
+        os.environ['MODELSCOPE_CACHE'] = str(model_dir)
+        
+        # 设置离线模式，防止网络访问
+        os.environ['HF_HUB_OFFLINE'] = '1'
+        os.environ['TRANSFORMERS_OFFLINE'] = '1'
+        os.environ['MODELSCOPE_OFFLINE'] = '1'
 
-        print(f"🔄 开始加载 FunASR 模型: {model_name}")
+        print(f"🔄 开始加载 FunASR 模型: {model_name} (离线模式)")
         start_time = time.time()
 
         # 小模型映射 - 使用FunASR实际支持的模型名称
@@ -304,7 +367,22 @@ def initialize_funasr(model_name: str = "paraformer-zh"):
         progress_thread.start()
 
         try:
-            funasr_model = AutoModel(model=model_name, cache_dir=str(model_dir))
+            # 检查是否存在本地模型文件，直接使用本地路径
+            local_model_path = model_dir / "models" / "iic" / "speech_seaco_paraformer_large_asr_nat-zh-cn-16k-common-vocab8404-pytorch"
+            if local_model_path.exists():
+                print(f"🎯 使用本地模型: {local_model_path}")
+                funasr_model = AutoModel(
+                    model=str(local_model_path),  # 直接使用本地路径
+                    disable_update=True
+                )
+            else:
+                # 回退到原始方法
+                funasr_model = AutoModel(
+                    model=model_name, 
+                    cache_dir=str(model_dir), 
+                    model_revision=None,  # 使用默认版本
+                    disable_update=True
+                )
         finally:
             progress_indicator.stop = True
             print("\r", end='')  # 清除进度指示器
@@ -378,6 +456,16 @@ async def create_speech(request: TTSRequest):
     Create speech from text using CosyVoice
     Compatible with OpenAI's /v1/audio/speech endpoint
     """
+    # 记录请求体参数
+    print("=" * 60)
+    print("📥 收到TTS请求:")
+    print(f"   模型: {request.model}")
+    print(f"   文本: {request.input}")
+    print(f"   声音: {request.voice}")
+    print(f"   格式: {request.response_format}")
+    print(f"   速度: {request.speed}")
+    print("=" * 60)
+    
     if cosyvoice_model is None:
         raise HTTPException(status_code=503, detail="CosyVoice model not available")
     
@@ -415,8 +503,8 @@ async def create_speech(request: TTSRequest):
         # Generate speech
         speech_data = None
 
-        # Helper function for zero-shot inference
-        def try_zero_shot_inference():
+        # Helper function to get prompt audio for various inference methods
+        def get_prompt_audio():
             # Try multiple possible locations for zero-shot prompt audio
             potential_paths = [
                 Path(__file__).parent / "models" / "cosyvoice" / "asset" / "zero_shot_prompt.wav",  # Local models dir
@@ -432,23 +520,29 @@ async def create_speech(request: TTSRequest):
                 
             for prompt_path in potential_paths:
                 if prompt_path.exists():
-                    prompt_speech = load_wav(str(prompt_path), 16000)
-                    return cosyvoice_model.inference_zero_shot(
-                        request.input, "希望你以后能够做的比我还好呦。", prompt_speech,
-                        stream=False, speed=request.speed
-                    )
+                    return load_wav(str(prompt_path), 16000)
+            return None
+
+        # Helper function for zero-shot inference
+        def try_zero_shot_inference():
+            prompt_speech = get_prompt_audio()
+            if prompt_speech is not None:
+                return cosyvoice_model.inference_zero_shot(
+                    request.input, "希望你以后能够做的比我还好呦。", prompt_speech,
+                    stream=False, speed=request.speed
+                )
             return None
 
         # Try different inference methods based on what's available
         # For CosyVoice2-0.5B, prioritize cross_lingual and instruct modes
         inference_methods = [
             ('inference_sft', lambda: cosyvoice_model.inference_sft(request.input, speaker, stream=False, speed=request.speed) if available_spks else None),
-            ('inference_cross_lingual', lambda: cosyvoice_model.inference_cross_lingual(request.input, None, stream=False) if hasattr(cosyvoice_model, 'inference_cross_lingual') else None),
-            ('inference_instruct2', lambda: cosyvoice_model.inference_instruct2(request.input, '用自然的语调说这句话', None, stream=False) if hasattr(cosyvoice_model, 'inference_instruct2') else None),
+            ('inference_cross_lingual', lambda: cosyvoice_model.inference_cross_lingual(request.input, get_prompt_audio(), stream=False) if hasattr(cosyvoice_model, 'inference_cross_lingual') and get_prompt_audio() is not None else None),
+            ('inference_instruct2', lambda: cosyvoice_model.inference_instruct2(request.input, '用自然的语调说这句话', get_prompt_audio(), stream=False) if hasattr(cosyvoice_model, 'inference_instruct2') and get_prompt_audio() is not None else None),
             ('inference_zero_shot', try_zero_shot_inference),
-            ('inference', lambda: cosyvoice_model.inference(request.input, stream=False, speed=request.speed)),
-            ('tts', lambda: cosyvoice_model.tts(request.input, speaker=speaker)),
-            ('generate', lambda: cosyvoice_model.generate(request.input)),
+            ('inference', lambda: cosyvoice_model.inference(request.input, stream=False, speed=request.speed) if hasattr(cosyvoice_model, 'inference') else None),
+            ('tts', lambda: cosyvoice_model.tts(request.input, speaker=speaker) if hasattr(cosyvoice_model, 'tts') else None),
+            ('generate', lambda: cosyvoice_model.generate(request.input) if hasattr(cosyvoice_model, 'generate') else None),
         ]
 
         for method_name, method_func in inference_methods:
@@ -539,6 +633,18 @@ async def create_transcription(
     Transcribe audio to text using FunASR
     Compatible with OpenAI's /v1/audio/transcriptions endpoint
     """
+    # 记录请求体参数
+    print("=" * 60)
+    print("📥 收到ASR请求:")
+    print(f"   文件名: {file.filename}")
+    print(f"   文件类型: {file.content_type}")
+    print(f"   模型: {model}")
+    print(f"   语言: {language}")
+    print(f"   提示: {prompt}")
+    print(f"   返回格式: {response_format}")
+    print(f"   温度: {temperature}")
+    print("=" * 60)
+    
     tts_only_mode = globals().get('TTS_ONLY_MODE', False)
     if tts_only_mode:
         raise HTTPException(status_code=503, detail="ASR functionality disabled in TTS-only mode")
@@ -622,7 +728,7 @@ if __name__ == "__main__":
     import argparse
     
     parser = argparse.ArgumentParser()
-    parser.add_argument("--host", type=str, default="127.0.0.1", help="Host to bind to")
+    parser.add_argument("--host", type=str, default="0.0.0.0", help="Host to bind to")
     parser.add_argument("--port", type=int, default=8000, help="Port to bind to") 
     parser.add_argument("--cosyvoice-model", type=str, 
                        default="models/cosyvoice/CosyVoice2-0.5B",
