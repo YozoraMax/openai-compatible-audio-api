@@ -17,11 +17,14 @@ openai-compatible-audio-api/
 ├── requirements.txt            # Python依赖文件
 ├── README.md                  # 项目说明文档
 ├── .gitignore                 # Git忽略文件配置
-├── CosyVoice/                 # CosyVoice TTS项目（自动下载）
-├── Dolphin/                   # 历史项目目录（已不使用）
-└── models/                    # 模型存储目录（运行时自动创建）
+├── CosyVoice/                 # CosyVoice TTS项目代码（自动克隆）
+└── models/                    # 统一模型存储目录（自动创建）
     ├── cosyvoice/            # CosyVoice模型文件
-    └── funasr/               # FunASR模型缓存
+    │   ├── iic/             # ModelScope下载的模型
+    │   │   └── CosyVoice2-0.5B/  # 主要TTS模型
+    │   └── asset/           # 零样本推理音频文件
+    └── funasr/              # FunASR模型缓存
+        └── [模型文件]        # ASR模型自动下载到此处
 ```
 
 ## 部署方式
@@ -57,7 +60,7 @@ python3 openai_compatible_api.py --tts-only
 python3 openai_compatible_api.py \
   --host 0.0.0.0 \
   --port 8000 \
-  --cosyvoice-model "CosyVoice/pretrained_models/CosyVoice2-0.5B" \
+  --cosyvoice-model "models/cosyvoice/CosyVoice2-0.5B" \
   --asr-model "paraformer-zh-streaming"
 ```
 
@@ -69,11 +72,13 @@ python3 openai_compatible_api.py \
   - `paraformer-zh-streaming`: 流式模型 (~840MB，快速启动，低延迟)
 
 **首次启动说明：**
-- 服务会自动检测并下载必要的模型文件
-- 加载过程会显示详细进度和耗时
-- CosyVoice模型约2GB，FunASR大模型约1GB
-- 使用 `--fast` 或 `--tts-only` 选项可显著减少启动时间
-- 默认服务地址：`http://127.0.0.1:8000`
+- 🏗️ 服务会自动创建 `models` 目录并下载必要的模型文件
+- 📁 所有模型统一保存在 `models/` 目录下，便于管理
+- 📊 CosyVoice模型约2GB（保存到 `models/cosyvoice/`）
+- 📊 FunASR模型约1GB（保存到 `models/funasr/`）
+- ⏱️ 加载过程会显示详细进度和耗时
+- 🚀 使用 `--fast` 或 `--tts-only` 选项可显著减少启动时间
+- 🌐 默认服务地址：`http://127.0.0.1:8000`
 
 **性能对比：**
 
@@ -95,6 +100,25 @@ conda deactivate
 # 删除环境（如需重新安装）
 conda env remove -n myenv311
 ```
+
+### 模型目录管理
+
+**新的统一模型目录结构：**
+```bash
+models/
+├── cosyvoice/                    # CosyVoice TTS 模型目录
+│   ├── iic/CosyVoice2-0.5B/     # 从ModelScope自动下载的模型
+│   └── asset/                   # 零样本推理音频文件
+└── funasr/                      # FunASR ASR 模型目录
+    └── [自动下载的ASR模型文件]
+```
+
+**模型目录优势：**
+- 📁 统一管理：所有模型集中在 `models/` 目录
+- 🔄 自动迁移：启动时自动将旧路径的模型迁移到新目录
+- 🧹 易于清理：删除 `models/` 目录即可清理所有模型
+- 💾 节省空间：避免重复下载模型文件
+- 🔗 向下兼容：支持旧版本的模型路径
 
 ## API使用
 
@@ -171,8 +195,9 @@ curl http://127.0.0.1:8000/v1/models
 
 4. **模型下载失败**
    - 检查网络连接，确保能访问ModelScope
-   - 检查磁盘空间是否充足
-   - 模型会在首次启动时自动下载
+   - 检查磁盘空间是否充足（需要至少4GB可用空间）
+   - 模型会自动下载到 `models/` 目录
+   - 如需重新下载，删除对应的模型子目录即可
 
 5. **内存不足**
    - CosyVoice和FunASR模型较大，建议至少8GB内存
@@ -199,6 +224,21 @@ curl http://127.0.0.1:8000/v1/models
 
    # 重新初始化shell
    source ~/.bashrc
+   ```
+
+8. **模型相关问题**
+   ```bash
+   # 清理所有模型文件（重新下载）
+   rm -rf models/
+   
+   # 仅清理CosyVoice模型
+   rm -rf models/cosyvoice/
+   
+   # 仅清理FunASR模型
+   rm -rf models/funasr/
+   
+   # 查看模型文件大小
+   du -sh models/
    ```
 
 ## 开发

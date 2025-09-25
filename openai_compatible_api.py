@@ -67,9 +67,14 @@ app = FastAPI(title="OpenAI Compatible Audio API", version="1.0.0")
 cosyvoice_model = None
 funasr_model = None
 
-def fix_cosyvoice_model_path(expected_model_path: str = "CosyVoice/pretrained_models/CosyVoice2-0.5B"):
-    """修复CosyVoice模型路径问题"""
+def fix_cosyvoice_model_path(expected_model_path: str = "models/cosyvoice/CosyVoice2-0.5B"):
+    """修复CosyVoice模型路径问题 - 统一使用models目录"""
     base_dir = Path(__file__).parent
+
+    # 确保models目录结构存在
+    models_dir = base_dir / "models"
+    cosyvoice_dir = models_dir / "cosyvoice"
+    cosyvoice_dir.mkdir(parents=True, exist_ok=True)
 
     # API期望的路径
     expected_path = base_dir / expected_model_path
@@ -81,13 +86,21 @@ def fix_cosyvoice_model_path(expected_model_path: str = "CosyVoice/pretrained_mo
             print(f"✓ CosyVoice模型路径正确: {expected_model_path}")
             return True
 
-    # 检查ModelScope下载的实际路径
-    potential_paths = [
+    # 检查可能的旧路径（用于迁移）
+    potential_old_paths = [
         base_dir / "CosyVoice" / "pretrained_models" / "iic" / "CosyVoice2-0.5B",
-        base_dir / "models" / "cosyvoice" / "iic" / "CosyVoice2-0.5B",
+        base_dir / "CosyVoice" / "pretrained_models" / "CosyVoice2-0.5B", 
         base_dir / "CosyVoice" / "pretrained_models" / "CosyVoice-300M-SFT",
         base_dir / "CosyVoice" / "pretrained_models" / "CosyVoice-300M",
     ]
+
+    # 检查models目录下可能的路径
+    potential_paths = [
+        base_dir / "models" / "cosyvoice" / "iic" / "CosyVoice2-0.5B",
+        base_dir / "models" / "cosyvoice" / "CosyVoice2-0.5B",
+        base_dir / "models" / "cosyvoice" / "CosyVoice-300M-SFT", 
+        base_dir / "models" / "cosyvoice" / "CosyVoice-300M",
+    ] + potential_old_paths
 
     for actual_path in potential_paths:
         if actual_path.exists() and actual_path.is_dir():
@@ -97,35 +110,44 @@ def fix_cosyvoice_model_path(expected_model_path: str = "CosyVoice/pretrained_mo
                 print(f"找到CosyVoice模型: {actual_path}")
                 print(f"配置文件: {[f.name for f in config_files]}")
 
-                # 确保期望路径的父目录存在
-                expected_path.parent.mkdir(parents=True, exist_ok=True)
-
-                # 尝试创建符号链接
-                if not expected_path.exists():
+                # 如果模型在旧路径，迁移到新的models目录
+                if not str(actual_path).startswith(str(models_dir)):
+                    new_path = cosyvoice_dir / actual_path.name
+                    print(f"🔄 迁移模型到统一目录: {actual_path} -> {new_path}")
                     try:
-                        expected_path.symlink_to(actual_path, target_is_directory=True)
-                        print(f"✓ 创建符号链接: {expected_path} -> {actual_path}")
-                        return True
-                    except OSError:
-                        # 如果符号链接失败，尝试移动
+                        import shutil
+                        if new_path.exists():
+                            shutil.rmtree(new_path)
+                        shutil.move(str(actual_path), str(new_path))
+                        actual_path = new_path
+                        print(f"✅ 模型迁移完成: {new_path}")
+                    except Exception as e:
+                        print(f"⚠️ 模型迁移失败，使用原路径: {e}")
+
+                # 确保期望路径指向正确的模型
+                if actual_path != expected_path:
+                    expected_path.parent.mkdir(parents=True, exist_ok=True)
+                    if not expected_path.exists():
                         try:
-                            import shutil
-                            if expected_path.exists():
-                                shutil.rmtree(expected_path)
-                            shutil.move(str(actual_path), str(expected_path))
-                            print(f"✓ 移动模型文件: {actual_path} -> {expected_path}")
-                            return True
-                        except Exception as e:
-                            print(f"✗ 移动模型失败: {e}")
-                            continue
-                else:
-                    return True
+                            expected_path.symlink_to(actual_path, target_is_directory=True)
+                            print(f"✓ 创建符号链接: {expected_path} -> {actual_path}")
+                        except OSError:
+                            print(f"⚠️ 符号链接创建失败，直接使用路径: {actual_path}")
+                
+                return True
 
     return False
 
-def check_and_download_models(cosyvoice_model_path: str = "CosyVoice/pretrained_models/CosyVoice2-0.5B"):
-    """检查并下载必要的模型"""
-    print("检查模型文件...")
+def check_and_download_models(cosyvoice_model_path: str = "models/cosyvoice/CosyVoice2-0.5B"):
+    """检查并下载必要的模型到统一的models目录"""
+    print("📁 检查并创建models目录结构...")
+    
+    base_dir = Path(__file__).parent
+    models_dir = base_dir / "models"
+    models_dir.mkdir(exist_ok=True)
+    
+    print("✅ models目录已创建")
+    print("🔍 检查模型文件...")
 
     # 检查并修复CosyVoice模型路径
     cosyvoice_ready = fix_cosyvoice_model_path(cosyvoice_model_path)
@@ -145,17 +167,17 @@ def check_and_download_models(cosyvoice_model_path: str = "CosyVoice/pretrained_
     try:
         from funasr import AutoModel
         # 简单检查是否可以初始化模型（会自动下载）
-        print("检查FunASR模型...")
-        model_dir = Path(__file__).parent / "models" / "funasr"
+        print("🔍 检查FunASR模型...")
+        model_dir = models_dir / "funasr"
         model_dir.mkdir(parents=True, exist_ok=True)
 
         # 设置缓存目录
         os.environ['FUNASR_CACHE_HOME'] = str(model_dir)
 
         # 尝试加载模型（如果不存在会自动下载）
-        print("初始化FunASR模型（如需要会自动下载）...")
+        print("⬇️ 初始化FunASR模型（如需要会自动下载到models/funasr）...")
         test_model = AutoModel(model="paraformer-zh", cache_dir=str(model_dir))
-        print("✓ FunASR模型准备就绪")
+        print("✅ FunASR模型准备就绪")
         funasr_ready = True
 
     except ImportError:
@@ -166,20 +188,30 @@ def check_and_download_models(cosyvoice_model_path: str = "CosyVoice/pretrained_
     return cosyvoice_ready, funasr_ready
 
 def download_cosyvoice_model(model_path: str):
-    """下载CosyVoice模型"""
+    """下载CosyVoice模型到models目录"""
     try:
         from modelscope import snapshot_download
 
-        # 创建模型目录
-        full_path = Path(__file__).parent / model_path
-        full_path.parent.mkdir(parents=True, exist_ok=True)
+        base_dir = Path(__file__).parent
+        models_dir = base_dir / "models" / "cosyvoice"
+        models_dir.mkdir(parents=True, exist_ok=True)
 
-        print("从ModelScope下载CosyVoice模型...")
+        print("⬇️ 从ModelScope下载CosyVoice模型到models/cosyvoice目录...")
+        print("📊 模型大小约2GB，请耐心等待...")
+        
+        # 下载到models/cosyvoice目录
         downloaded_path = snapshot_download(
             'iic/CosyVoice2-0.5B',
-            cache_dir=str(full_path.parent)
+            cache_dir=str(models_dir)
         )
-        print(f"✓ CosyVoice模型下载完成: {downloaded_path}")
+        print(f"✅ CosyVoice模型下载完成: {downloaded_path}")
+        
+        # 检查下载的模型是否在预期位置
+        expected_model_path = models_dir / "iic" / "CosyVoice2-0.5B"
+        if expected_model_path.exists():
+            print(f"✅ 模型已保存到: {expected_model_path}")
+        else:
+            print(f"⚠️ 模型可能在其他位置: {downloaded_path}")
 
         # 下载完成后，调用路径修复函数
         fix_cosyvoice_model_path(model_path)
@@ -204,7 +236,7 @@ class TranscriptionResponse(BaseModel):
     text: str
 
 def create_default_prompt_audio():
-    """创建默认的零样本提示音频文件"""
+    """创建默认的零样本提示音频文件到models目录"""
     try:
         import numpy as np
 
@@ -226,8 +258,8 @@ def create_default_prompt_audio():
         # 转换为torch tensor
         audio_tensor = torch.from_numpy(audio).float().unsqueeze(0)
 
-        # 保存音频文件
-        asset_dir = Path(__file__).parent / "CosyVoice" / "asset"
+        # 保存音频文件到models目录
+        asset_dir = Path(__file__).parent / "models" / "cosyvoice" / "asset"
         asset_dir.mkdir(parents=True, exist_ok=True)
 
         output_path = asset_dir / "zero_shot_prompt.wav"
@@ -240,7 +272,7 @@ def create_default_prompt_audio():
         print(f"⚠️ 创建默认提示音频失败: {e}")
         return None
 
-def initialize_cosyvoice(model_path: str = "CosyVoice/pretrained_models/CosyVoice2-0.5B"):
+def initialize_cosyvoice(model_path: str = "models/cosyvoice/CosyVoice2-0.5B"):
     """Initialize CosyVoice model"""
     global cosyvoice_model
     import time
@@ -255,9 +287,13 @@ def initialize_cosyvoice(model_path: str = "CosyVoice/pretrained_models/CosyVoic
     print(f"📂 模型路径: {model_path}")
 
     if not full_path.exists():
-        # Try alternative paths including the downloaded ModelScope path
+        # Try alternative paths including models directory and legacy paths
         alt_paths = [
-            "CosyVoice/pretrained_models/iic/CosyVoice2-0.5B",  # ModelScope下载路径
+            "models/cosyvoice/iic/CosyVoice2-0.5B",  # ModelScope下载到models目录的路径
+            "models/cosyvoice/CosyVoice-300M-SFT",
+            "models/cosyvoice/CosyVoice-300M", 
+            "CosyVoice/pretrained_models/iic/CosyVoice2-0.5B",  # 旧路径兼容
+            "CosyVoice/pretrained_models/CosyVoice2-0.5B",
             "CosyVoice/pretrained_models/CosyVoice-300M-SFT",
             "CosyVoice/pretrained_models/CosyVoice-300M",
         ]
@@ -265,7 +301,7 @@ def initialize_cosyvoice(model_path: str = "CosyVoice/pretrained_models/CosyVoic
             alt_full_path = Path(__file__).parent / alt_path
             if alt_full_path.exists():
                 full_path = alt_full_path
-                print(f"使用替代路径: {alt_path}")
+                print(f"✅ 使用发现的模型路径: {alt_path}")
                 break
         else:
             raise FileNotFoundError(f"CosyVoice model not found at {model_path} or alternative paths: {alt_paths}")
@@ -290,13 +326,35 @@ def initialize_cosyvoice(model_path: str = "CosyVoice/pretrained_models/CosyVoic
         elapsed = time.time() - start_time
         print(f"✅ {model_type} 模型加载完成 (耗时: {elapsed:.1f}秒)")
 
-        # 检查并创建默认提示音频文件（用于零样本推理）
-        prompt_path = Path(__file__).parent / "CosyVoice" / "asset" / "zero_shot_prompt.wav"
-        if not prompt_path.exists():
-            print("🎵 零样本提示音频文件不存在，正在创建默认文件...")
-            create_default_prompt_audio()
+        # 检查零样本推理音频文件
+        # 优先查找CosyVoice原生asset文件
+        cosyvoice_asset_paths = [
+            Path(__file__).parent / "CosyVoice" / "asset" / "zero_shot_prompt.wav",
+            Path(__file__).parent / "CosyVoice" / "asset" / "samples" / "zero_shot_prompt.wav",
+            Path(__file__).parent / "CosyVoice" / "asset" / "samples" / "cross_lingual_prompt.wav",
+            Path(__file__).parent / "CosyVoice" / "asset" / "instruct_prompt.wav",
+        ]
+        
+        original_asset_found = False
+        for asset_path in cosyvoice_asset_paths:
+            if asset_path.exists():
+                print(f"✅ 发现CosyVoice原生提示音频文件: {asset_path}")
+                original_asset_found = True
+                break
+        
+        if not original_asset_found:
+            # 如果没有找到原生文件，创建备用文件到models目录
+            asset_dir = Path(__file__).parent / "models" / "cosyvoice" / "asset"
+            asset_dir.mkdir(parents=True, exist_ok=True)
+            prompt_path = asset_dir / "zero_shot_prompt.wav"
+            
+            if not prompt_path.exists():
+                print("🎵 未找到CosyVoice原生音频文件，正在创建备用文件...")
+                create_default_prompt_audio()
+            else:
+                print(f"✅ 备用提示音频文件已存在: {prompt_path}")
         else:
-            print(f"✅ 零样本提示音频文件已存在: {prompt_path}")
+            print("✅ 将优先使用CosyVoice原生提示音频文件进行零样本推理")
 
     except Exception as e:
         raise RuntimeError(f"Failed to load CosyVoice model: {e}")
@@ -362,8 +420,8 @@ def initialize_funasr(model_name: str = "paraformer-zh"):
 @app.on_event("startup")
 async def startup_event():
     """Initialize models on startup"""
-    # 获取配置的模型路径
-    cosyvoice_model_path = globals().get('COSYVOICE_MODEL_PATH', 'CosyVoice/pretrained_models/CosyVoice2-0.5B')
+    # 获取配置的模型路径 - 默认使用models目录
+    cosyvoice_model_path = globals().get('COSYVOICE_MODEL_PATH', 'models/cosyvoice/CosyVoice2-0.5B')
     asr_model_name = globals().get('ASR_MODEL_NAME', 'paraformer-zh')
     tts_only_mode = globals().get('TTS_ONLY_MODE', False)
 
@@ -459,14 +517,25 @@ async def create_speech(request: TTSRequest):
 
         # Helper function for zero-shot inference
         def try_zero_shot_inference():
-            # Try to find existing prompt audio files
-            prompt_paths = [
+            # 优先查找CosyVoice原生asset目录下的音频文件
+            cosyvoice_asset_paths = [
                 Path(__file__).parent / "CosyVoice" / "asset" / "zero_shot_prompt.wav",
+                Path(__file__).parent / "CosyVoice" / "asset" / "samples" / "zero_shot_prompt.wav",
+                Path(__file__).parent / "CosyVoice" / "asset" / "samples" / "cross_lingual_prompt.wav",
+                Path(__file__).parent / "CosyVoice" / "asset" / "instruct_prompt.wav",
+            ]
+
+            # 次优选择：models目录和其他位置
+            fallback_paths = [
+                Path(__file__).parent / "models" / "cosyvoice" / "asset" / "zero_shot_prompt.wav",
                 Path(__file__).parent / "CosyVoice" / "zero_shot_prompt.wav",
                 Path(__file__).parent / "zero_shot_prompt.wav"
             ]
 
-            for path in prompt_paths:
+            # 组合所有路径，优先使用原生asset文件
+            all_prompt_paths = cosyvoice_asset_paths + fallback_paths
+
+            for path in all_prompt_paths:
                 if path.exists():
                     try:
                         print(f"🎵 找到提示音频文件: {path}")
@@ -479,7 +548,7 @@ async def create_speech(request: TTSRequest):
                         print(f"⚠️ 零样本模式路径 {path} 失败: {e}")
                         continue
 
-            # If no prompt file found, try to create a simple synthetic one
+            # 如果没有找到任何提示音频文件，尝试无提示推理
             print("📝 未找到提示音频文件，尝试使用空提示进行零样本推理")
             try:
                 # Some CosyVoice2 models support inference without explicit prompt audio
@@ -677,8 +746,8 @@ if __name__ == "__main__":
     parser.add_argument("--host", type=str, default="127.0.0.1", help="Host to bind to")
     parser.add_argument("--port", type=int, default=8000, help="Port to bind to") 
     parser.add_argument("--cosyvoice-model", type=str, 
-                       default="CosyVoice/pretrained_models/CosyVoice2-0.5B",
-                       help="CosyVoice model path")
+                       default="models/cosyvoice/CosyVoice2-0.5B",
+                       help="CosyVoice model path (now defaults to models directory)")
     parser.add_argument("--asr-model", type=str, default="paraformer-zh",
                        help="FunASR model name (paraformer-zh, paraformer-zh-streaming)")
     parser.add_argument("--fast", action="store_true",
