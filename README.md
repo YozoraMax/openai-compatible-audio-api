@@ -14,31 +14,52 @@ OpenAI兼容的音频API服务器，基于CosyVoice (TTS) 和 FunASR (ASR) 实�
 ```
 openai-compatible-audio-api/
 ├── openai_compatible_api.py    # 主API服务器
-├── requirements.txt            # Python依赖文件
+├── requirements.txt            # Python依赖文件 (原始版本)
+├── requirements-cpu.txt        # CPU版本依赖文件 (推荐)
 ├── README.md                  # 项目说明文档
-├── .gitignore                 # Git忽略文件配置
-├── CosyVoice/                 # CosyVoice TTS项目（自动下载）
-├── Dolphin/                   # 历史项目目录（已不使用）
-└── models/                    # 模型存储目录（运行时自动创建）
+├── CosyVoice/                 # CosyVoice项目代码（需要手动克隆）
+└── models/                    # 统一模型存储目录（自动创建）
     ├── cosyvoice/            # CosyVoice模型文件
-    └── funasr/               # FunASR模型缓存
+    │   ├── iic/             # ModelScope下载的模型
+    │   │   └── CosyVoice2-0.5B/  # 主要TTS模型
+    │   └── asset/           # 零样本推理音频文件（可选）
+    └── funasr/              # FunASR模型缓存
+        └── [模型文件]        # ASR模型自动下载到此处
 ```
 
 ## 部署方式
 
 ### Conda环境部署（推荐）
 
-#### 1. 创建Conda环境
+#### 1. 准备环境
 
 ```bash
-# 创建Python 3.11环境（解决matcha-tts兼容性问题）
+# 1. 安装系统依赖工具（必需）
+# Ubuntu/Debian:
+sudo apt update && sudo apt install build-essential ffmpeg
+
+# CentOS/RHEL:
+# sudo yum groupinstall "Development Tools"
+# sudo yum install ffmpeg
+
+# macOS:
+# xcode-select --install
+# brew install ffmpeg
+
+# 2. 创建Python 3.11环境（解决matcha-tts兼容性问题）
 conda create -n myenv311 python=3.11
 
-# 激活环境
+# 3. 激活环境
 conda activate myenv311
 
-# 安装依赖
-pip install -r requirements.txt
+# 4. 克隆CosyVoice项目（必需）
+git clone https://github.com/FunAudioLLM/CosyVoice.git
+
+# 5. 安装Python依赖 (推荐使用CPU版本)
+pip install -r requirements-cpu.txt
+
+# 或使用原始版本 (需要更多磁盘空间)
+# pip install -r requirements.txt
 ```
 
 #### 2. 启动服务
@@ -57,7 +78,7 @@ python3 openai_compatible_api.py --tts-only
 python3 openai_compatible_api.py \
   --host 0.0.0.0 \
   --port 8000 \
-  --cosyvoice-model "CosyVoice/pretrained_models/CosyVoice2-0.5B" \
+  --cosyvoice-model "models/cosyvoice/CosyVoice2-0.5B" \
   --asr-model "paraformer-zh-streaming"
 ```
 
@@ -69,11 +90,13 @@ python3 openai_compatible_api.py \
   - `paraformer-zh-streaming`: 流式模型 (~840MB，快速启动，低延迟)
 
 **首次启动说明：**
-- 服务会自动检测并下载必要的模型文件
-- 加载过程会显示详细进度和耗时
-- CosyVoice模型约2GB，FunASR大模型约1GB
-- 使用 `--fast` 或 `--tts-only` 选项可显著减少启动时间
-- 默认服务地址：`http://127.0.0.1:8000`
+- 🏗️ 服务会自动创建 `models` 目录并下载必要的模型文件
+- 📁 所有模型统一保存在 `models/` 目录下，便于管理
+- 📊 CosyVoice模型约2GB（保存到 `models/cosyvoice/`）
+- 📊 FunASR模型约1GB（保存到 `models/funasr/`）
+- ⏱️ 加载过程会显示详细进度和耗时
+- 🚀 使用 `--fast` 或 `--tts-only` 选项可显著减少启动时间
+- 🌐 默认服务地址：`http://127.0.0.1:8000`
 
 **性能对比：**
 
@@ -95,6 +118,25 @@ conda deactivate
 # 删除环境（如需重新安装）
 conda env remove -n myenv311
 ```
+
+### 模型目录管理
+
+**新的统一模型目录结构：**
+```bash
+models/
+├── cosyvoice/                    # CosyVoice TTS 模型目录
+│   ├── iic/CosyVoice2-0.5B/     # 从ModelScope自动下载的模型
+│   └── asset/                   # 零样本推理音频文件
+└── funasr/                      # FunASR ASR 模型目录
+    └── [自动下载的ASR模型文件]
+```
+
+**模型目录优势：**
+- 📁 统一管理：所有模型集中在 `models/` 目录
+- 🧹 易于清理：删除 `models/` 目录即可清理所有模型
+- 💾 节省空间：避免重复下载模型文件
+- 🔧 简化路径：无需复杂的软链接，直接从models目录加载
+- 🎵 音频文件：零样本推理音频文件优先使用CosyVoice原始asset文件
 
 ## API使用
 
@@ -150,36 +192,93 @@ curl http://127.0.0.1:8000/v1/models
 
 ### 常见问题
 
-1. **端口被占用**
+1. **磁盘空间不足 (CUDA 依赖包太大)**
+   ```bash
+   # 解决方案：使用CPU版本 (推荐)
+   pip install -r requirements-cpu.txt
+   
+   # 清理pip缓存释放空间
+   pip cache purge
+   
+   # 清理conda缓存
+   conda clean --all
+   
+   # 查看磁盘使用情况
+   df -h
+   ```
+
+2. **依赖版本冲突**
+   ```bash
+   # 使用验证过的CPU版本依赖
+   pip install -r requirements-cpu.txt
+   
+   # 如果仍有冲突，手动安装核心组件
+   pip install transformers==4.38.0 huggingface_hub==0.19.4 tokenizers==0.15.2
+   ```
+
+3. **CosyVoice导入失败**
+   ```bash
+   # 确保已克隆CosyVoice项目
+   git clone https://github.com/FunAudioLLM/CosyVoice.git
+   
+   # 安装依赖 (推荐使用CPU版本)
+   pip install -r requirements-cpu.txt
+   ```
+
+2. **编译依赖缺失（gcc/g++未找到）**
+   ```bash
+   # Ubuntu/Debian:
+   sudo apt update && sudo apt install build-essential
+   
+   # CentOS/RHEL:
+   sudo yum groupinstall "Development Tools"
+   
+   # macOS:
+   xcode-select --install
+   
+   # 验证编译工具安装
+   gcc --version
+   g++ --version
+   ```
+
+3. **端口被占用**
    ```bash
    lsof -ti:8000 | xargs kill -9
    ```
 
-2. **matcha-tts安装失败（Python 3.12兼容性问题）**
+4. **matcha-tts安装失败（Python 3.12兼容性问题）**
    ```bash
    # 解决方案：使用Python 3.11
    conda create -n myenv311 python=3.11
    conda activate myenv311
-   pip install -r requirements.txt
+   pip install -r requirements-cpu.txt
    ```
 
-3. **依赖编译失败**
+5. **依赖编译失败**
    ```bash
-   # 某些包可能编译失败，可以跳过
+   # 尝试使用预编译包（推荐）
+   conda install -c conda-forge matcha-tts pyworld || pip install matcha-tts pyworld
+   
+   # 或跳过有问题的包
    pip install editdistance --only-binary=all --prefer-binary || echo "editdistance skipped"
+   
+   # 最小化安装（仅必需包）
+   pip install torch torchaudio fastapi uvicorn funasr modelscope
    ```
 
-4. **模型下载失败**
+6. **模型下载失败**
    - 检查网络连接，确保能访问ModelScope
-   - 检查磁盘空间是否充足
-   - 模型会在首次启动时自动下载
+   - 检查磁盘空间是否充足（CPU版本需要至少4GB，CUDA版本需要6GB+）
+   - 使用CPU版本可显著减少磁盘空间需求
+   - 模型会自动下载到 `models/` 目录
+   - 如需重新下载，删除对应的模型子目录即可
 
-5. **内存不足**
+7. **内存不足**
    - CosyVoice和FunASR模型较大，建议至少8GB内存
    - 使用 `--fast` 选项可减少内存占用
    - 可以只启用其中一个模型
 
-6. **模型加载时间长**
+8. **模型加载时间长**
    ```bash
    # 使用TTS专用模式（最快）
    python3 openai_compatible_api.py --tts-only
@@ -191,7 +290,7 @@ curl http://127.0.0.1:8000/v1/models
    python3 openai_compatible_api.py --asr-model paraformer-zh-streaming
    ```
 
-7. **Conda环境问题**
+9. **Conda环境问题**
    ```bash
    # 如果conda未安装，可以下载Miniconda
    wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
@@ -201,15 +300,34 @@ curl http://127.0.0.1:8000/v1/models
    source ~/.bashrc
    ```
 
+10. **模型相关问题**
+   ```bash
+   # 清理所有模型文件（重新下载）
+   rm -rf models/
+   
+   # 仅清理CosyVoice模型
+   rm -rf models/cosyvoice/
+   
+   # 仅清理FunASR模型
+   rm -rf models/funasr/
+   
+   # 查看模型文件大小
+   du -sh models/
+   ```
+
 ## 开发
 
 ### 环境要求
 
-- Python 3.11（推荐，解决matcha-tts兼容性问题）
-- Conda或Miniconda
-- PyTorch 2.0+
-- 至少8GB内存
-- 网络连接（首次运行下载模型）
+- **系统编译工具**：gcc/g++（必需，用于编译matcha-tts和pyworld）
+- **Python 3.11**（推荐，解决matcha-tts兼容性问题）
+- **Conda或Miniconda**
+- **PyTorch 2.0+**（CPU版本即可）
+- **至少8GB内存**
+- **网络连接**（首次运行下载模型）
+- **磁盘空间**：
+  - CPU版本：至少4GB可用空间（推荐）
+  - CUDA版本：至少6GB+可用空间
 
 ### 代码结构
 
