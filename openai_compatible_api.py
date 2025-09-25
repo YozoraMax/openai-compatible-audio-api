@@ -321,8 +321,13 @@ def initialize_funasr(model_name: str = "paraformer-zh"):
         # 强制设置FunASR缓存目录到我们的models目录
         os.environ['FUNASR_CACHE_HOME'] = str(model_dir)
         os.environ['MODELSCOPE_CACHE'] = str(model_dir)
+        
+        # 设置离线模式，防止网络访问
+        os.environ['HF_HUB_OFFLINE'] = '1'
+        os.environ['TRANSFORMERS_OFFLINE'] = '1'
+        os.environ['MODELSCOPE_OFFLINE'] = '1'
 
-        print(f"🔄 开始加载 FunASR 模型: {model_name}")
+        print(f"🔄 开始加载 FunASR 模型: {model_name} (离线模式)")
         start_time = time.time()
 
         # 小模型映射 - 使用FunASR实际支持的模型名称
