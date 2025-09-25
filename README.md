@@ -33,6 +33,16 @@ openai-compatible-audio-api/
 #### 1. 准备环境
 
 ```bash
+# 安装系统编译工具（必需）
+# Ubuntu/Debian:
+sudo apt update && sudo apt install build-essential
+
+# CentOS/RHEL:
+# sudo yum groupinstall "Development Tools"
+
+# macOS:
+# xcode-select --install
+
 # 创建Python 3.11环境（解决matcha-tts兼容性问题）
 conda create -n myenv311 python=3.11
 
@@ -184,12 +194,28 @@ curl http://127.0.0.1:8000/v1/models
    pip install matcha-tts einops phonemizer
    ```
 
-2. **端口被占用**
+2. **编译依赖缺失（gcc/g++未找到）**
+   ```bash
+   # Ubuntu/Debian:
+   sudo apt update && sudo apt install build-essential
+   
+   # CentOS/RHEL:
+   sudo yum groupinstall "Development Tools"
+   
+   # macOS:
+   xcode-select --install
+   
+   # 验证编译工具安装
+   gcc --version
+   g++ --version
+   ```
+
+3. **端口被占用**
    ```bash
    lsof -ti:8000 | xargs kill -9
    ```
 
-3. **matcha-tts安装失败（Python 3.12兼容性问题）**
+4. **matcha-tts安装失败（Python 3.12兼容性问题）**
    ```bash
    # 解决方案：使用Python 3.11
    conda create -n myenv311 python=3.11
@@ -197,24 +223,30 @@ curl http://127.0.0.1:8000/v1/models
    pip install -r requirements.txt
    ```
 
-4. **依赖编译失败**
+5. **依赖编译失败**
    ```bash
-   # 某些包可能编译失败，可以跳过
+   # 尝试使用预编译包（推荐）
+   conda install -c conda-forge matcha-tts pyworld || pip install matcha-tts pyworld
+   
+   # 或跳过有问题的包
    pip install editdistance --only-binary=all --prefer-binary || echo "editdistance skipped"
+   
+   # 最小化安装（仅必需包）
+   pip install torch torchaudio fastapi uvicorn funasr modelscope
    ```
 
-5. **模型下载失败**
+6. **模型下载失败**
    - 检查网络连接，确保能访问ModelScope
    - 检查磁盘空间是否充足（需要至少4GB可用空间）
    - 模型会自动下载到 `models/` 目录
    - 如需重新下载，删除对应的模型子目录即可
 
-6. **内存不足**
+7. **内存不足**
    - CosyVoice和FunASR模型较大，建议至少8GB内存
    - 使用 `--fast` 选项可减少内存占用
    - 可以只启用其中一个模型
 
-7. **模型加载时间长**
+8. **模型加载时间长**
    ```bash
    # 使用TTS专用模式（最快）
    python3 openai_compatible_api.py --tts-only
@@ -226,7 +258,7 @@ curl http://127.0.0.1:8000/v1/models
    python3 openai_compatible_api.py --asr-model paraformer-zh-streaming
    ```
 
-8. **Conda环境问题**
+9. **Conda环境问题**
    ```bash
    # 如果conda未安装，可以下载Miniconda
    wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
@@ -236,7 +268,7 @@ curl http://127.0.0.1:8000/v1/models
    source ~/.bashrc
    ```
 
-9. **模型相关问题**
+10. **模型相关问题**
    ```bash
    # 清理所有模型文件（重新下载）
    rm -rf models/
@@ -255,11 +287,13 @@ curl http://127.0.0.1:8000/v1/models
 
 ### 环境要求
 
-- Python 3.11（推荐，解决matcha-tts兼容性问题）
-- Conda或Miniconda
-- PyTorch 2.0+
-- 至少8GB内存
-- 网络连接（首次运行下载模型）
+- **系统编译工具**：gcc/g++（必需，用于编译matcha-tts和pyworld）
+- **Python 3.11**（推荐，解决matcha-tts兼容性问题）
+- **Conda或Miniconda**
+- **PyTorch 2.0+**
+- **至少8GB内存**
+- **网络连接**（首次运行下载模型）
+- **磁盘空间**：至少4GB可用空间
 
 ### 代码结构
 
