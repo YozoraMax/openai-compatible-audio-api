@@ -23,10 +23,7 @@ tokenizers==0.15.2
 numpy==1.25.2
 pyyaml
 
-# CosyVoice 直接从GitHub安装
-git+https://github.com/FunAudioLLM/CosyVoice.git
-
-# CosyVoice 核心依赖
+# CosyVoice 核心依赖（需要手动克隆CosyVoice项目）
 HyperPyYAML>=1.2.0
 onnxruntime>=1.18.0
 protobuf>=4.20.0

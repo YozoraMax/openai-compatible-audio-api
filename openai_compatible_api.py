@@ -18,8 +18,10 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 import uvicorn
 
-# CosyVoice will be installed via pip, no need to add paths
-# Note: CosyVoice is now installed as a pip package from GitHub
+# Add CosyVoice to path (需要手动克隆CosyVoice项目)
+import sys
+sys.path.append(str(Path(__file__).parent / "CosyVoice" / "third_party" / "Matcha-TTS"))
+sys.path.append(str(Path(__file__).parent / "CosyVoice"))
 
 # Import CosyVoice
 CosyVoice = None
