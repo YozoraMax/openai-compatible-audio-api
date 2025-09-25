@@ -33,30 +33,14 @@ CosyVoice2 = None
 load_wav = None
 
 try:
-    # 设置环境变量禁用一些可选功能
     os.environ['MATCHA_DISABLE_COMPILE'] = '1'
-
-    # 尝试创建matcha模块存根（如果不存在）
-    matcha_dir = Path(__file__).parent / "CosyVoice" / "third_party" / "Matcha-TTS"
-    if not matcha_dir.exists():
-        matcha_dir.mkdir(parents=True, exist_ok=True)
-        (matcha_dir / "__init__.py").write_text("")
-
-    # 添加到Python路径
-    if str(matcha_dir) not in sys.path:
-        sys.path.insert(0, str(matcha_dir))
-
     from cosyvoice.cli.cosyvoice import CosyVoice, CosyVoice2
     from cosyvoice.utils.file_utils import load_wav
     print("✓ CosyVoice导入成功")
 except ImportError as e:
     print(f"⚠️ CosyVoice导入失败: {e}")
-    print("💡 解决方案：")
-    print("   1. 运行: python3 install_dependencies.py")
-    print("   2. 或手动安装: pip install matcha-tts einops phonemizer")
 except Exception as e:
     print(f"❌ CosyVoice初始化错误: {e}")
-    print("💡 这可能是模型加载问题，服务器将继续启动但TTS功能不可用")
 
 # FunASR for speech recognition
 print("ℹ️ 使用FunASR进行语音识别")
@@ -327,34 +311,11 @@ def initialize_cosyvoice(model_path: str = "models/cosyvoice/CosyVoice2-0.5B"):
         print(f"✅ {model_type} 模型加载完成 (耗时: {elapsed:.1f}秒)")
 
         # 检查零样本推理音频文件
-        # 优先查找CosyVoice原生asset文件
-        cosyvoice_asset_paths = [
-            Path(__file__).parent / "CosyVoice" / "asset" / "zero_shot_prompt.wav",
-            Path(__file__).parent / "CosyVoice" / "asset" / "samples" / "zero_shot_prompt.wav",
-            Path(__file__).parent / "CosyVoice" / "asset" / "samples" / "cross_lingual_prompt.wav",
-            Path(__file__).parent / "CosyVoice" / "asset" / "instruct_prompt.wav",
-        ]
-        
-        original_asset_found = False
-        for asset_path in cosyvoice_asset_paths:
-            if asset_path.exists():
-                print(f"✅ 发现CosyVoice原生提示音频文件: {asset_path}")
-                original_asset_found = True
-                break
-        
-        if not original_asset_found:
-            # 如果没有找到原生文件，创建备用文件到models目录
-            asset_dir = Path(__file__).parent / "models" / "cosyvoice" / "asset"
-            asset_dir.mkdir(parents=True, exist_ok=True)
-            prompt_path = asset_dir / "zero_shot_prompt.wav"
-            
-            if not prompt_path.exists():
-                print("🎵 未找到CosyVoice原生音频文件，正在创建备用文件...")
-                create_default_prompt_audio()
-            else:
-                print(f"✅ 备用提示音频文件已存在: {prompt_path}")
-        else:
-            print("✅ 将优先使用CosyVoice原生提示音频文件进行零样本推理")
+        prompt_path = Path(__file__).parent / "models" / "cosyvoice" / "asset" / "zero_shot_prompt.wav"
+        if not prompt_path.exists():
+            prompt_path.parent.mkdir(parents=True, exist_ok=True)
+            create_default_prompt_audio()
+        print(f"✅ 零样本推理音频文件: {prompt_path}")
 
     except Exception as e:
         raise RuntimeError(f"Failed to load CosyVoice model: {e}")
@@ -517,48 +478,14 @@ async def create_speech(request: TTSRequest):
 
         # Helper function for zero-shot inference
         def try_zero_shot_inference():
-            # 优先查找CosyVoice原生asset目录下的音频文件
-            cosyvoice_asset_paths = [
-                Path(__file__).parent / "CosyVoice" / "asset" / "zero_shot_prompt.wav",
-                Path(__file__).parent / "CosyVoice" / "asset" / "samples" / "zero_shot_prompt.wav",
-                Path(__file__).parent / "CosyVoice" / "asset" / "samples" / "cross_lingual_prompt.wav",
-                Path(__file__).parent / "CosyVoice" / "asset" / "instruct_prompt.wav",
-            ]
-
-            # 次优选择：models目录和其他位置
-            fallback_paths = [
-                Path(__file__).parent / "models" / "cosyvoice" / "asset" / "zero_shot_prompt.wav",
-                Path(__file__).parent / "CosyVoice" / "zero_shot_prompt.wav",
-                Path(__file__).parent / "zero_shot_prompt.wav"
-            ]
-
-            # 组合所有路径，优先使用原生asset文件
-            all_prompt_paths = cosyvoice_asset_paths + fallback_paths
-
-            for path in all_prompt_paths:
-                if path.exists():
-                    try:
-                        print(f"🎵 找到提示音频文件: {path}")
-                        prompt_speech = load_wav(str(path), 16000)
-                        return cosyvoice_model.inference_zero_shot(
-                            request.input, "希望你以后能够做的比我还好呦。", prompt_speech,
-                            stream=False, speed=request.speed
-                        )
-                    except Exception as e:
-                        print(f"⚠️ 零样本模式路径 {path} 失败: {e}")
-                        continue
-
-            # 如果没有找到任何提示音频文件，尝试无提示推理
-            print("📝 未找到提示音频文件，尝试使用空提示进行零样本推理")
-            try:
-                # Some CosyVoice2 models support inference without explicit prompt audio
+            prompt_path = Path(__file__).parent / "models" / "cosyvoice" / "asset" / "zero_shot_prompt.wav"
+            if prompt_path.exists():
+                prompt_speech = load_wav(str(prompt_path), 16000)
                 return cosyvoice_model.inference_zero_shot(
-                    request.input, "希望你以后能够做的比我还好呦。", None,
+                    request.input, "希望你以后能够做的比我还好呦。", prompt_speech,
                     stream=False, speed=request.speed
                 )
-            except Exception as e:
-                print(f"⚠️ 无提示音频零样本推理失败: {e}")
-                return None
+            return None
 
         # Try different inference methods based on what's available
         # For CosyVoice2-0.5B, prioritize cross_lingual and instruct modes

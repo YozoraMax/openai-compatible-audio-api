@@ -63,5 +63,3 @@ CosyVoice/zero_shot_prompt.wav
 
 # Large model files
 *.safetensors
-
-models/
