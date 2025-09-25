@@ -10,6 +10,56 @@ import traceback
 from pathlib import Path
 from typing import Optional
 
+# 设置离线模式环境变量 - 必须在导入其他库之前设置
+offline_env_vars = {
+    'HF_HUB_OFFLINE': '1',
+    'TRANSFORMERS_OFFLINE': '1',
+    'MODELSCOPE_OFFLINE': '1',
+    'HF_DATASETS_OFFLINE': '1',
+    'DISABLE_TELEMETRY': '1',
+    'WETEXT_DISABLE_DOWNLOAD': '1',
+    'OFFLINE_MODE': '1',
+    'NO_PROXY': '*',
+    'HTTP_PROXY': '',
+    'HTTPS_PROXY': ''
+}
+
+for key, value in offline_env_vars.items():
+    os.environ[key] = value
+
+# 完全禁用网络访问 - 强制离线模式
+print("🔒 启用完全离线模式 - 禁止所有网络访问")
+import socket
+import urllib3.util.connection
+
+_original_getaddrinfo = socket.getaddrinfo
+_original_create_connection = urllib3.util.connection.create_connection
+
+def offline_getaddrinfo(*args, **kwargs):
+    # 只允许本地地址
+    if args[0] in ['localhost', '127.0.0.1', '0.0.0.0', '::1']:
+        return _original_getaddrinfo(*args, **kwargs)
+    raise OSError(f"网络访问被禁用: {args[0]} - 强制离线模式")
+
+def offline_create_connection(*args, **kwargs):
+    raise OSError(f"网络连接被禁用 - 强制离线模式")
+
+# 完全阻止网络访问
+socket.getaddrinfo = offline_getaddrinfo
+urllib3.util.connection.create_connection = offline_create_connection
+
+# 也禁用requests库的网络访问
+try:
+    import requests.adapters
+    original_send = requests.adapters.HTTPAdapter.send
+
+    def blocked_send(self, request, *args, **kwargs):
+        raise OSError(f"HTTP请求被禁用 - 强制离线模式: {request.url}")
+
+    requests.adapters.HTTPAdapter.send = blocked_send
+except ImportError:
+    pass
+
 import torch
 import torchaudio
 import numpy as np
@@ -23,13 +73,24 @@ import sys
 sys.path.append(str(Path(__file__).parent / "CosyVoice" / "third_party" / "Matcha-TTS"))
 sys.path.append(str(Path(__file__).parent / "CosyVoice"))
 
+# 设置模型缓存目录到本地
+models_dir = Path(__file__).parent / "models"
+models_dir.mkdir(exist_ok=True)
+os.environ['FUNASR_CACHE_HOME'] = str(models_dir)
+os.environ['MODELSCOPE_CACHE'] = str(models_dir)
+
 # Import CosyVoice
 CosyVoice = None
 CosyVoice2 = None
 load_wav = None
 
 try:
+    # 设置更多离线模式环境变量
     os.environ['MATCHA_DISABLE_COMPILE'] = '1'
+    os.environ['TOKENIZERS_PARALLELISM'] = 'false'
+    os.environ['WETEXT_DISABLE_DOWNLOAD'] = '1'
+    os.environ['OFFLINE_MODE'] = '1'
+
     from cosyvoice.cli.cosyvoice import CosyVoice, CosyVoice2
     from cosyvoice.utils.file_utils import load_wav
     print("✓ CosyVoice导入成功")
@@ -58,6 +119,7 @@ def find_cosyvoice_model_path(expected_model_path: str = "models/cosyvoice/CosyV
     
     # 检查models目录下可能的路径
     potential_paths = [
+        base_dir / "models" / "cosyvoice" / "iic" / "CosyVoice2-0___5B",
         base_dir / "models" / "cosyvoice" / "iic" / "CosyVoice2-0.5B",
         base_dir / "models" / "cosyvoice" / "CosyVoice2-0.5B",
         base_dir / "models" / "cosyvoice" / "CosyVoice-300M-SFT",
@@ -262,21 +324,21 @@ def create_default_prompt_audio():
         return None
 
 def initialize_cosyvoice(model_path: str = "models/cosyvoice/CosyVoice2-0.5B"):
-    """Initialize CosyVoice model"""
+    """Initialize CosyVoice model - 完全离线模式"""
     global cosyvoice_model
     import time
 
     if not CosyVoice or not CosyVoice2:
         raise RuntimeError("CosyVoice not available")
 
-    print(f"🔄 开始加载 CosyVoice 模型...")
+    print(f"🔄 开始加载 CosyVoice 模型 (完全离线模式)...")
     start_time = time.time()
 
     # 查找实际的模型路径
     found_model_path = find_cosyvoice_model_path(model_path)
     if not found_model_path:
         raise FileNotFoundError(f"CosyVoice model not found in models directory")
-    
+
     full_path = Path(found_model_path)
     print(f"📂 使用模型路径: {found_model_path}")
 
@@ -286,6 +348,7 @@ def initialize_cosyvoice(model_path: str = "models/cosyvoice/CosyVoice2-0.5B"):
 
     try:
         print("⏳ 正在初始化模型参数...")
+
         if cosyvoice2_yaml.exists():
             print("📄 使用 CosyVoice2 配置")
             cosyvoice_model = CosyVoice2(str(full_path), load_jit=False, load_trt=False, fp16=False)
@@ -311,7 +374,7 @@ def initialize_cosyvoice(model_path: str = "models/cosyvoice/CosyVoice2-0.5B"):
         raise RuntimeError(f"Failed to load CosyVoice model: {e}")
 
 def initialize_funasr(model_name: str = "paraformer-zh"):
-    """Initialize FunASR model"""
+    """Initialize FunASR model - 完全离线模式"""
     global funasr_model
 
     try:
@@ -321,71 +384,35 @@ def initialize_funasr(model_name: str = "paraformer-zh"):
         model_dir = Path(__file__).parent / "models" / "funasr"
         model_dir.mkdir(parents=True, exist_ok=True)
 
-        # 清理可能影响下载路径的环境变量
-        env_vars_to_clear = ['MODELSCOPE_CACHE', 'HF_HOME', 'HF_CACHE_HOME', 'TRANSFORMERS_CACHE', 'HUGGINGFACE_HUB_CACHE']
-        for var in env_vars_to_clear:
-            if var in os.environ:
-                del os.environ[var]
-        
-        # 强制设置FunASR缓存目录到我们的models目录
-        os.environ['FUNASR_CACHE_HOME'] = str(model_dir)
-        os.environ['MODELSCOPE_CACHE'] = str(model_dir)
-        
-        # 设置离线模式，防止网络访问
-        os.environ['HF_HUB_OFFLINE'] = '1'
-        os.environ['TRANSFORMERS_OFFLINE'] = '1'
-        os.environ['MODELSCOPE_OFFLINE'] = '1'
-
-        print(f"🔄 开始加载 FunASR 模型: {model_name} (离线模式)")
+        print(f"🔄 开始加载 FunASR 模型: {model_name} (完全离线模式)")
         start_time = time.time()
 
-        # 小模型映射 - 使用FunASR实际支持的模型名称
-        model_sizes = {
-            "paraformer-zh": "标准中文模型 (~1GB)",
-            "iic/speech_paraformer-zh-small_asr_nat-zh-cn-16k-common-vocab8404-pytorch": "小模型 (~300MB)",
-            "paraformer-zh-streaming": "流式模型 (~840MB)",
-            "paraformer-en": "英文模型 (~800MB)"
-        }
+        # 查找本地模型路径
+        potential_local_paths = [
+            model_dir / "hub" / "iic" / "speech_seaco_paraformer_large_asr_nat-zh-cn-16k-common-vocab8404-pytorch",
+            model_dir / "models" / "iic" / "speech_seaco_paraformer_large_asr_nat-zh-cn-16k-common-vocab8404-pytorch",
+            model_dir / "iic" / "speech_seaco_paraformer_large_asr_nat-zh-cn-16k-common-vocab8404-pytorch",
+        ]
 
-        size_info = model_sizes.get(model_name, "未知大小")
-        print(f"📊 模型信息: {size_info}")
-        print("⏳ 正在下载/加载模型，请稍候...")
-        print("💡 提示: 模型加载可能需要几分钟，请耐心等待...")
+        local_model_path = None
+        for path in potential_local_paths:
+            if path.exists() and (path / "model.pt").exists():
+                local_model_path = path
+                print(f"✓ 找到本地FunASR模型: {local_model_path}")
+                break
 
-        # 添加加载进度提示
-        import threading
-        import time
+        if not local_model_path:
+            raise RuntimeError(f"本地FunASR模型未找到。请确保模型已下载到以下任一位置:\n" +
+                             "\n".join([f"  - {p}" for p in potential_local_paths]))
 
-        def progress_indicator():
-            dots = 0
-            while not hasattr(progress_indicator, 'stop'):
-                dots = (dots + 1) % 4
-                print(f"\r⏳ 模型加载中{'.' * dots}{' ' * (3 - dots)}", end='', flush=True)
-                time.sleep(1)
+        print(f"🎯 使用本地模型: {local_model_path}")
+        print("⏳ 正在加载模型...")
 
-        progress_thread = threading.Thread(target=progress_indicator, daemon=True)
-        progress_thread.start()
-
-        try:
-            # 检查是否存在本地模型文件，直接使用本地路径
-            local_model_path = model_dir / "models" / "iic" / "speech_seaco_paraformer_large_asr_nat-zh-cn-16k-common-vocab8404-pytorch"
-            if local_model_path.exists():
-                print(f"🎯 使用本地模型: {local_model_path}")
-                funasr_model = AutoModel(
-                    model=str(local_model_path),  # 直接使用本地路径
-                    disable_update=True
-                )
-            else:
-                # 回退到原始方法
-                funasr_model = AutoModel(
-                    model=model_name, 
-                    cache_dir=str(model_dir), 
-                    model_revision=None,  # 使用默认版本
-                    disable_update=True
-                )
-        finally:
-            progress_indicator.stop = True
-            print("\r", end='')  # 清除进度指示器
+        funasr_model = AutoModel(
+            model=str(local_model_path),
+            disable_update=True,
+            trust_remote_code=False
+        )
 
         elapsed = time.time() - start_time
         print(f"✅ FunASR {model_name} 模型加载完成 (耗时: {elapsed:.1f}秒)")
