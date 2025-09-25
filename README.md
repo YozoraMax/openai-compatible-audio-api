@@ -43,6 +43,13 @@ sudo apt update && sudo apt install build-essential
 # macOS:
 # xcode-select --install
 
+# 安装音频处理工具（可选但推荐）
+# Ubuntu/Debian:
+sudo apt install ffmpeg
+
+# macOS:
+brew install ffmpeg
+
 # 创建Python 3.11环境（解决matcha-tts兼容性问题）
 conda create -n myenv311 python=3.11
 
