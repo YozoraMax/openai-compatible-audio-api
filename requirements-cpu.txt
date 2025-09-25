@@ -22,7 +22,7 @@ pydub
 modelscope>=1.0.0
 transformers==4.51.3
 huggingface_hub>=0.30.0
-tokenizers==0.15.2
+tokenizers>=0.21,<0.22
 numpy==1.25.2
 pyyaml
 
