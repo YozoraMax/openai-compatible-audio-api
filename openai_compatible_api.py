@@ -554,8 +554,8 @@ async def create_transcription(
             tmp_file_path = tmp_file.name
 
         try:
-            # Use FunASR for transcription
-            result = funasr_model(tmp_file_path)
+            # Use FunASR for transcription - correct method call
+            result = funasr_model.generate(input=tmp_file_path)
 
             # Clean up temp file
             os.unlink(tmp_file_path)

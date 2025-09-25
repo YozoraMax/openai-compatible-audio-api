@@ -14,7 +14,8 @@ OpenAI兼容的音频API服务器，基于CosyVoice (TTS) 和 FunASR (ASR) 实�
 ```
 openai-compatible-audio-api/
 ├── openai_compatible_api.py    # 主API服务器
-├── requirements.txt            # Python依赖文件
+├── requirements.txt            # Python依赖文件 (原始版本)
+├── requirements-cpu.txt        # CPU版本依赖文件 (推荐)
 ├── README.md                  # 项目说明文档
 ├── CosyVoice/                 # CosyVoice项目代码（需要手动克隆）
 └── models/                    # 统一模型存储目录（自动创建）
@@ -54,8 +55,11 @@ conda activate myenv311
 # 4. 克隆CosyVoice项目（必需）
 git clone https://github.com/FunAudioLLM/CosyVoice.git
 
-# 5. 安装Python依赖
-pip install -r requirements.txt
+# 5. 安装Python依赖 (推荐使用CPU版本)
+pip install -r requirements-cpu.txt
+
+# 或使用原始版本 (需要更多磁盘空间)
+# pip install -r requirements.txt
 ```
 
 #### 2. 启动服务
@@ -188,13 +192,37 @@ curl http://127.0.0.1:8000/v1/models
 
 ### 常见问题
 
-1. **CosyVoice导入失败**
+1. **磁盘空间不足 (CUDA 依赖包太大)**
+   ```bash
+   # 解决方案：使用CPU版本 (推荐)
+   pip install -r requirements-cpu.txt
+   
+   # 清理pip缓存释放空间
+   pip cache purge
+   
+   # 清理conda缓存
+   conda clean --all
+   
+   # 查看磁盘使用情况
+   df -h
+   ```
+
+2. **依赖版本冲突**
+   ```bash
+   # 使用验证过的CPU版本依赖
+   pip install -r requirements-cpu.txt
+   
+   # 如果仍有冲突，手动安装核心组件
+   pip install transformers==4.38.0 huggingface_hub==0.19.4 tokenizers==0.15.2
+   ```
+
+3. **CosyVoice导入失败**
    ```bash
    # 确保已克隆CosyVoice项目
    git clone https://github.com/FunAudioLLM/CosyVoice.git
    
-   # 安装依赖
-   pip install -r requirements.txt
+   # 安装依赖 (推荐使用CPU版本)
+   pip install -r requirements-cpu.txt
    ```
 
 2. **编译依赖缺失（gcc/g++未找到）**
@@ -223,7 +251,7 @@ curl http://127.0.0.1:8000/v1/models
    # 解决方案：使用Python 3.11
    conda create -n myenv311 python=3.11
    conda activate myenv311
-   pip install -r requirements.txt
+   pip install -r requirements-cpu.txt
    ```
 
 5. **依赖编译失败**
@@ -240,7 +268,8 @@ curl http://127.0.0.1:8000/v1/models
 
 6. **模型下载失败**
    - 检查网络连接，确保能访问ModelScope
-   - 检查磁盘空间是否充足（需要至少4GB可用空间）
+   - 检查磁盘空间是否充足（CPU版本需要至少4GB，CUDA版本需要6GB+）
+   - 使用CPU版本可显著减少磁盘空间需求
    - 模型会自动下载到 `models/` 目录
    - 如需重新下载，删除对应的模型子目录即可
 
@@ -293,10 +322,12 @@ curl http://127.0.0.1:8000/v1/models
 - **系统编译工具**：gcc/g++（必需，用于编译matcha-tts和pyworld）
 - **Python 3.11**（推荐，解决matcha-tts兼容性问题）
 - **Conda或Miniconda**
-- **PyTorch 2.0+**
+- **PyTorch 2.0+**（CPU版本即可）
 - **至少8GB内存**
 - **网络连接**（首次运行下载模型）
-- **磁盘空间**：至少4GB可用空间
+- **磁盘空间**：
+  - CPU版本：至少4GB可用空间（推荐）
+  - CUDA版本：至少6GB+可用空间
 
 ### 代码结构
 
