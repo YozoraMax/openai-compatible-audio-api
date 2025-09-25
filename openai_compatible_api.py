@@ -75,6 +75,31 @@ def find_cosyvoice_model_path(expected_model_path: str = "models/cosyvoice/CosyV
     
     return None
 
+def check_funasr_model_exists(model_dir: Path) -> bool:
+    """检查FunASR模型是否已存在于指定目录"""
+    try:
+        # 常见的FunASR模型文件模式
+        model_patterns = [
+            "**/paraformer*",
+            "**/speech_*",
+            "**/*.safetensors",
+            "**/*.bin",
+            "**/pytorch_model.bin",
+            "**/config.yaml"
+        ]
+        
+        for pattern in model_patterns:
+            found_files = list(model_dir.glob(pattern))
+            if found_files:
+                print(f"✓ 找到FunASR模型文件: {len(found_files)} 个文件匹配 {pattern}")
+                return True
+        
+        print("✗ 未找到FunASR模型文件")
+        return False
+    except Exception as e:
+        print(f"✗ 检查FunASR模型失败: {e}")
+        return False
+
 def check_and_download_models(cosyvoice_model_path: str = "models/cosyvoice/CosyVoice2-0.5B"):
     """检查并下载必要的模型到统一的models目录"""
     print("📁 检查并创建models目录结构...")
@@ -105,24 +130,41 @@ def check_and_download_models(cosyvoice_model_path: str = "models/cosyvoice/Cosy
     funasr_ready = False
     try:
         from funasr import AutoModel
-        # 简单检查是否可以初始化模型（会自动下载）
         print("🔍 检查FunASR模型...")
         model_dir = models_dir / "funasr"
         model_dir.mkdir(parents=True, exist_ok=True)
 
-        # 设置缓存目录
-        os.environ['FUNASR_CACHE_HOME'] = str(model_dir)
-
-        # 尝试加载模型（如果不存在会自动下载）
-        print("⬇️ 初始化FunASR模型（如需要会自动下载到models/funasr）...")
-        test_model = AutoModel(model="paraformer-zh", cache_dir=str(model_dir), disable_update=True)
-        print("✅ FunASR模型准备就绪")
-        funasr_ready = True
+        # 先检查模型是否已存在
+        if check_funasr_model_exists(model_dir):
+            print("✅ FunASR模型已存在，跳过下载")
+            funasr_ready = True
+        else:
+            # 清理可能影响下载路径的环境变量
+            env_vars_to_clear = ['MODELSCOPE_CACHE', 'HF_HOME', 'HF_CACHE_HOME', 'TRANSFORMERS_CACHE', 'HUGGINGFACE_HUB_CACHE']
+            for var in env_vars_to_clear:
+                if var in os.environ:
+                    del os.environ[var]
+            
+            # 强制设置FunASR缓存目录到我们的models目录
+            os.environ['FUNASR_CACHE_HOME'] = str(model_dir)
+            os.environ['MODELSCOPE_CACHE'] = str(model_dir)
+            
+            # 确保模型下载到指定位置（不设置离线模式，允许下载）
+            print(f"⬇️ 初始化FunASR模型（将下载到: {model_dir}）...")
+            test_model = AutoModel(
+                model="paraformer-zh", 
+                cache_dir=str(model_dir), 
+                model_revision=None,  # 使用默认版本
+                disable_update=True
+            )
+            print("✅ FunASR模型下载并准备就绪")
+            funasr_ready = True
 
     except ImportError:
         print("✗ FunASR未安装，请运行: pip install funasr")
     except Exception as e:
         print(f"✗ FunASR模型初始化失败: {e}")
+        print("💡 建议：如果是网络问题，可以使用 --tts-only 参数启动仅TTS模式")
 
     return cosyvoice_ready, funasr_ready
 
@@ -270,8 +312,15 @@ def initialize_funasr(model_name: str = "paraformer-zh"):
         model_dir = Path(__file__).parent / "models" / "funasr"
         model_dir.mkdir(parents=True, exist_ok=True)
 
-        # 设置缓存目录
+        # 清理可能影响下载路径的环境变量
+        env_vars_to_clear = ['MODELSCOPE_CACHE', 'HF_HOME', 'HF_CACHE_HOME', 'TRANSFORMERS_CACHE', 'HUGGINGFACE_HUB_CACHE']
+        for var in env_vars_to_clear:
+            if var in os.environ:
+                del os.environ[var]
+        
+        # 强制设置FunASR缓存目录到我们的models目录
         os.environ['FUNASR_CACHE_HOME'] = str(model_dir)
+        os.environ['MODELSCOPE_CACHE'] = str(model_dir)
 
         print(f"🔄 开始加载 FunASR 模型: {model_name}")
         start_time = time.time()
@@ -304,7 +353,12 @@ def initialize_funasr(model_name: str = "paraformer-zh"):
         progress_thread.start()
 
         try:
-            funasr_model = AutoModel(model=model_name, cache_dir=str(model_dir), disable_update=True)
+            funasr_model = AutoModel(
+                model=model_name, 
+                cache_dir=str(model_dir), 
+                model_revision=None,  # 使用默认版本
+                disable_update=True
+            )
         finally:
             progress_indicator.stop = True
             print("\r", end='')  # 清除进度指示器
