@@ -115,7 +115,7 @@ def check_and_download_models(cosyvoice_model_path: str = "models/cosyvoice/Cosy
 
         # 尝试加载模型（如果不存在会自动下载）
         print("⬇️ 初始化FunASR模型（如需要会自动下载到models/funasr）...")
-        test_model = AutoModel(model="paraformer-zh", cache_dir=str(model_dir))
+        test_model = AutoModel(model="paraformer-zh", cache_dir=str(model_dir), disable_update=True)
         print("✅ FunASR模型准备就绪")
         funasr_ready = True
 
@@ -304,7 +304,7 @@ def initialize_funasr(model_name: str = "paraformer-zh"):
         progress_thread.start()
 
         try:
-            funasr_model = AutoModel(model=model_name, cache_dir=str(model_dir))
+            funasr_model = AutoModel(model=model_name, cache_dir=str(model_dir), disable_update=True)
         finally:
             progress_indicator.stop = True
             print("\r", end='')  # 清除进度指示器
