@@ -1,0 +1,78 @@
+# CPU-only OpenAI Compatible API 依赖文件
+# 解决磁盘空间不足问题，使用CPU版本PyTorch
+
+# FastAPI 核心组件
+fastapi>=0.100.0
+fastapi-cli>=0.0.4
+uvicorn>=0.20.0
+pydantic>=2.0.0
+python-multipart>=0.0.5
+
+# PyTorch CPU版本 (避免CUDA依赖)
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.3.1+cpu
+torchaudio==2.3.1+cpu
+
+# 音频处理
+librosa>=0.10.0
+soundfile>=0.12.0
+pydub
+
+# 模型加载和工具 (使用CosyVoice兼容版本)
+modelscope>=1.0.0
+transformers==4.51.3
+huggingface_hub==0.19.4
+tokenizers==0.15.2
+numpy==1.25.2
+pyyaml
+
+# CosyVoice 核心依赖
+HyperPyYAML>=1.2.0
+onnxruntime>=1.18.0  # CPU版本
+protobuf>=4.20.0
+conformer>=0.3.2
+diffusers==0.29.0
+gdown>=5.1.0
+gradio==5.4.0  # 使用CosyVoice需要的版本
+grpcio>=1.57.0
+grpcio-tools>=1.57.0
+hydra-core>=1.3.2
+inflect>=7.3.1
+lightning>=2.2.4
+matplotlib>=3.7.5
+networkx>=3.1
+omegaconf>=2.3.0
+onnx>=1.16.0
+openai-whisper>=20231117
+pyarrow>=18.1.0
+rich>=13.7.1
+tensorboard>=2.14.0
+wetext>=0.0.4
+wget>=3.2
+
+# Matcha-TTS 依赖
+matcha-tts
+einops
+phonemizer
+pyworld
+
+# FunASR 依赖
+addict>=2.4.0
+funasr>=1.2.7
+sentencepiece==0.2.0
+kaldiio>=2.17.0
+jieba>=0.42.1
+jaconv>=0.4.0
+jamo>=0.4.1
+umap-learn>=0.5.9
+tensorboardX>=2.6.4
+pytorch-wpe>=0.0.1
+torch-complex>=0.4.4
+
+# 系统工具
+requests>=2.25
+tqdm>=4.64.0
+urllib3>=1.26
+packaging>=20.0
+filelock
+setuptools
