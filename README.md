@@ -14,16 +14,17 @@ OpenAI兼容的音频API服务器，基于CosyVoice (TTS) 和 FunASR (ASR) 实�
 ```
 openai-compatible-audio-api/
 ├── openai_compatible_api.py    # 主API服务器
-├── requirements.txt            # Python依赖文件
+├── requirements.txt            # Python依赖文件（包含CosyVoice）
 ├── README.md                  # 项目说明文档
-├── CosyVoice/                 # CosyVoice TTS项目代码（需要手动克隆）
 └── models/                    # 统一模型存储目录（自动创建）
     ├── cosyvoice/            # CosyVoice模型文件
     │   ├── iic/             # ModelScope下载的模型
     │   │   └── CosyVoice2-0.5B/  # 主要TTS模型
-    │   └── asset/           # 零样本推理音频文件
+    │   └── asset/           # 零样本推理音频文件（可选）
     └── funasr/              # FunASR模型缓存
         └── [模型文件]        # ASR模型自动下载到此处
+
+注意：CosyVoice现在通过pip安装，不再需要手动克隆项目目录
 ```
 
 ## 部署方式
@@ -33,33 +34,25 @@ openai-compatible-audio-api/
 #### 1. 准备环境
 
 ```bash
-# 安装系统编译工具（必需）
+# 1. 安装系统依赖工具（必需）
 # Ubuntu/Debian:
-sudo apt update && sudo apt install build-essential
+sudo apt update && sudo apt install build-essential ffmpeg
 
 # CentOS/RHEL:
 # sudo yum groupinstall "Development Tools"
+# sudo yum install ffmpeg
 
 # macOS:
 # xcode-select --install
+# brew install ffmpeg
 
-# 安装音频处理工具（可选但推荐）
-# Ubuntu/Debian:
-sudo apt install ffmpeg
-
-# macOS:
-brew install ffmpeg
-
-# 创建Python 3.11环境（解决matcha-tts兼容性问题）
+# 2. 创建Python 3.11环境（解决matcha-tts兼容性问题）
 conda create -n myenv311 python=3.11
 
-# 激活环境
+# 3. 激活环境
 conda activate myenv311
 
-# 克隆CosyVoice项目
-git clone https://github.com/FunAudioLLM/CosyVoice.git
-
-# 安装依赖
+# 4. 安装Python依赖（包含CosyVoice）
 pip install -r requirements.txt
 ```
 
@@ -136,7 +129,8 @@ models/
 - 📁 统一管理：所有模型集中在 `models/` 目录
 - 🧹 易于清理：删除 `models/` 目录即可清理所有模型
 - 💾 节省空间：避免重复下载模型文件
-- 🎵 音频文件：零样本推理音频文件自动生成到 `models/cosyvoice/asset/`
+- 📦 简化安装：CosyVoice通过pip安装，无需手动克隆项目
+- 🎵 音频文件：零样本推理音频文件使用CosyVoice包内置文件
 
 ## API使用
 
@@ -194,11 +188,11 @@ curl http://127.0.0.1:8000/v1/models
 
 1. **CosyVoice导入失败**
    ```bash
-   # 确保已克隆CosyVoice项目
-   git clone https://github.com/FunAudioLLM/CosyVoice.git
+   # CosyVoice现在通过pip自动安装，如果失败请重新安装依赖
+   pip install -r requirements.txt
    
-   # 安装必要依赖
-   pip install matcha-tts einops phonemizer
+   # 或手动安装CosyVoice
+   pip install git+https://github.com/FunAudioLLM/CosyVoice.git
    ```
 
 2. **编译依赖缺失（gcc/g++未找到）**
