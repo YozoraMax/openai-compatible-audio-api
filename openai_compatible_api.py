@@ -443,12 +443,12 @@ async def create_speech(request: TTSRequest):
         # For CosyVoice2-0.5B, prioritize cross_lingual and instruct modes
         inference_methods = [
             ('inference_sft', lambda: cosyvoice_model.inference_sft(request.input, speaker, stream=False, speed=request.speed) if available_spks else None),
-            ('inference_cross_lingual', lambda: cosyvoice_model.inference_cross_lingual(request.input, None, stream=False) if hasattr(cosyvoice_model, 'inference_cross_lingual') else None),
-            ('inference_instruct2', lambda: cosyvoice_model.inference_instruct2(request.input, '用自然的语调说这句话', None, stream=False) if hasattr(cosyvoice_model, 'inference_instruct2') else None),
+            ('inference_cross_lingual', lambda: cosyvoice_model.inference_cross_lingual(request.input, stream=False) if hasattr(cosyvoice_model, 'inference_cross_lingual') else None),
+            ('inference_instruct2', lambda: cosyvoice_model.inference_instruct2(request.input, '用自然的语调说这句话', stream=False) if hasattr(cosyvoice_model, 'inference_instruct2') else None),
             ('inference_zero_shot', try_zero_shot_inference),
-            ('inference', lambda: cosyvoice_model.inference(request.input, stream=False, speed=request.speed)),
-            ('tts', lambda: cosyvoice_model.tts(request.input, speaker=speaker)),
-            ('generate', lambda: cosyvoice_model.generate(request.input)),
+            ('inference', lambda: cosyvoice_model.inference(request.input, stream=False, speed=request.speed) if hasattr(cosyvoice_model, 'inference') else None),
+            ('tts', lambda: cosyvoice_model.tts(request.input, speaker=speaker) if hasattr(cosyvoice_model, 'tts') else None),
+            ('generate', lambda: cosyvoice_model.generate(request.input) if hasattr(cosyvoice_model, 'generate') else None),
         ]
 
         for method_name, method_func in inference_methods:
