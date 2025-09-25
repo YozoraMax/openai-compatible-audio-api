@@ -46,7 +46,6 @@ CosyVoice/zero_shot_prompt.wav
 # Temporary files
 *.tmp
 *.temp
-*.wav
 *.mp3
 *.mp4
 
