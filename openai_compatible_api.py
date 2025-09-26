@@ -89,7 +89,13 @@ try:
     os.environ['MATCHA_DISABLE_COMPILE'] = '1'
     os.environ['TOKENIZERS_PARALLELISM'] = 'false'
     os.environ['WETEXT_DISABLE_DOWNLOAD'] = '1'
+    os.environ['WETEXT_OFFLINE'] = '1'
     os.environ['OFFLINE_MODE'] = '1'
+    
+    # 禁用所有可能的网络访问
+    import sys
+    if 'modelscope' in sys.modules:
+        del sys.modules['modelscope']
 
     from cosyvoice.cli.cosyvoice import CosyVoice, CosyVoice2
     from cosyvoice.utils.file_utils import load_wav
@@ -348,14 +354,30 @@ def initialize_cosyvoice(model_path: str = "models/cosyvoice/CosyVoice2-0.5B"):
 
     try:
         print("⏳ 正在初始化模型参数...")
+        
+        # 设置更多离线模式环境变量，特别针对wetext
+        additional_offline_vars = {
+            'WETEXT_OFFLINE': '1',
+            'WETEXT_DISABLE_DOWNLOAD': '1', 
+            'MODELSCOPE_OFFLINE': '1',
+            'HF_HUB_OFFLINE': '1',
+            'TRANSFORMERS_OFFLINE': '1',
+            'DISABLE_TELEMETRY': '1',
+            'NO_PROXY': '*',
+            'HTTP_PROXY': '',
+            'HTTPS_PROXY': ''
+        }
+        
+        for key, value in additional_offline_vars.items():
+            os.environ[key] = value
 
         if cosyvoice2_yaml.exists():
             print("📄 使用 CosyVoice2 配置")
-            cosyvoice_model = CosyVoice2(str(full_path), load_jit=False, load_trt=False, fp16=False)
+            cosyvoice_model = CosyVoice2(str(full_path), load_jit=False, load_trt=False, fp16=False, load_onnx=False)
             model_type = "CosyVoice2"
         elif cosyvoice_yaml.exists():
             print("📄 使用 CosyVoice 配置")
-            cosyvoice_model = CosyVoice(str(full_path), load_jit=False, load_trt=False, fp16=False)
+            cosyvoice_model = CosyVoice(str(full_path), load_jit=False, load_trt=False, fp16=False, load_onnx=False)
             model_type = "CosyVoice"
         else:
             raise FileNotFoundError(f"Neither cosyvoice2.yaml nor cosyvoice.yaml found in {full_path}")
